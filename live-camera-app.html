@@ -1143,7 +1143,8 @@ let overlay = document.getElementById('overlay');
 let octx = overlay.getContext('2d');
 let procCanvas = document.createElement('canvas'); // Verarbeitungs-Auflösung (kleiner, für Performance)
 let pctx = procCanvas.getContext('2d');
-const PROC_W = 640;
+const PROC_W_RUN = 640;    // Auflösung im laufenden Betrieb (Laser-Erkennung, muss schnell sein)
+const PROC_W_CALIB = 1280; // Höhere Auflösung nur während der Kalibrierungssuche (mehr Bilddetail für die Marker)
 
 let calibrated = false;
 let H_screenToImage = null, H_imageToScreen = null;
@@ -1194,12 +1195,13 @@ function recalibrate(){ calibrated=false; H_screenToImage=null; H_imageToScreen=
 function loop(){
   if(!running) return;
   if(video.videoWidth > 0){
-    const scale = PROC_W / video.videoWidth;
+    const procW = calibrated ? PROC_W_RUN : PROC_W_CALIB;
+    const scale = procW / video.videoWidth;
     const PROC_H = Math.round(video.videoHeight*scale);
-    procCanvas.width = PROC_W; procCanvas.height = PROC_H;
-    pctx.drawImage(video, 0,0, PROC_W, PROC_H);
+    procCanvas.width = procW; procCanvas.height = PROC_H;
+    pctx.drawImage(video, 0,0, procW, PROC_H);
 
-    overlay.width = PROC_W; overlay.height = PROC_H;
+    overlay.width = procW; overlay.height = PROC_H;
     octx.drawImage(procCanvas, 0,0);
 
     if(!calibrated){
@@ -1208,14 +1210,31 @@ function loop(){
       runLaserFrame();
     }
   }
-  setTimeout(()=>requestAnimationFrame(loop), 80); // ~12 fps Verarbeitung, schont Handy-CPU
+  const delay = calibrated ? 80 : 200; // Kalibrierung bei höherer Auflösung seltener rechnen (CPU-Last)
+  setTimeout(()=>requestAnimationFrame(loop), delay);
 }
 
 /* ---------------- Kalibrierung (ArUco, pro Frame versucht) ---------------- */
+// Eigener Wrapper um AR.Detector.detect(): die Original-Methode verwirft Marker-Kandidaten,
+// deren Kontur-Punktezahl unter 20% der Bildbreite liegt - das ist auf große, bildfüllende
+// Marker ausgelegt. Unsere Eckmarker sind im Kamerabild oft klein (Bildschirm füllt nicht
+// den ganzen Rahmen aus), daher hier deutlich entschärft.
+AR.Detector.prototype.detectRelaxed = function(image, minSizeFrac, minLength){
+  minSizeFrac = minSizeFrac || 0.03;
+  minLength = minLength || 5;
+  CV.grayscale(image, this.grey);
+  CV.adaptiveThreshold(this.grey, this.thres, 2, 7);
+  this.contours = CV.findContours(this.thres, this.binary);
+  this.candidates = this.findCandidates(this.contours, image.width*minSizeFrac, 0.05, minLength);
+  this.candidates = this.clockwiseCorners(this.candidates);
+  this.candidates = this.notTooNear(this.candidates, 10);
+  return this.findMarkers(this.grey, this.candidates, 49);
+};
+
 const idToKey = {0:'tl', 1:'tr', 2:'br', 3:'bl'};
 function tryCalibrate(){
   const imageData = pctx.getImageData(0,0,procCanvas.width, procCanvas.height);
-  const markers = detector.detect(imageData);
+  const markers = detector.detectRelaxed(imageData, 0.025, 6);
   const found = { tl:null, tr:null, br:null, bl:null };
   markers.forEach(m=>{
     const key = idToKey[m.id]; if(!key) return;
