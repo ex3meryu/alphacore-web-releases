@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Live-Kamera — Beamer Training</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#14161a; --panel:#1c1f24; --panel-2:#20242a; --border:#2c3038;
+    --text:#e8e6e1; --muted:#8b8f97; --accent:#e8873a; --safe:#6fcf7b; --danger:#d9534f;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%; margin:0;}
+  body{background:var(--bg-deep); color:var(--text); font-family:'Inter',system-ui,sans-serif;}
+  .app{display:flex; flex-direction:column; height:100vh;}
+  .topbar{display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--border);}
+  .topbar .eyebrow{font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.12em; color:var(--accent); text-transform:uppercase;}
+  .topbar h1{font-family:'Oswald',sans-serif; font-size:14px; font-weight:600; margin:0; text-transform:uppercase; letter-spacing:.02em;}
+  .badge{margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:11px; padding:4px 10px; border-radius:20px; border:1px solid var(--border);}
+  .badge.ok{color:var(--safe); border-color:var(--safe);}
+  .badge.bad{color:var(--danger); border-color:var(--danger);}
+  .badge.wait{color:var(--muted);}
+
+  .main{flex:1; display:flex; min-height:0;}
+  .video-wrap{flex:1; position:relative; background:#000; overflow:hidden; display:flex; align-items:center; justify-content:center;}
+  video{display:none;}
+  #overlay{max-width:100%; max-height:100%; width:100%; height:auto;}
+  .video-hint{position:absolute; color:var(--muted); font-family:'JetBrains Mono',monospace; font-size:13px; text-align:center; padding:20px;}
+  .hud{
+    position:absolute; top:10px; left:10px; right:10px; display:flex; justify-content:space-between; gap:8px;
+    font-family:'JetBrains Mono',monospace; font-size:11px; pointer-events:none;
+  }
+  .hud-box{background:rgba(20,22,26,.75); border:1px solid var(--border); border-radius:4px; padding:6px 10px; color:var(--text);}
+  .hud-box b{color:var(--accent);}
+
+  .side{width:330px; min-width:330px; background:var(--panel); border-left:1px solid var(--border); padding:14px; overflow-y:auto;}
+  .side h2{font-family:'Oswald',sans-serif; font-size:11.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:14px 0 8px; display:flex; align-items:center; gap:8px;}
+  .side h2:first-child{margin-top:0;}
+  .side h2::before{content:''; width:3px; height:12px; background:var(--accent); display:inline-block;}
+  button.action{width:100%; font-family:'Inter',sans-serif; font-weight:600; font-size:13px; border-radius:3px; border:1px solid var(--accent); background:var(--accent); color:#1a1200; padding:10px; cursor:pointer; margin-bottom:8px;}
+  button.ghost{width:100%; font-family:'Inter',sans-serif; font-weight:600; font-size:12px; border-radius:3px; border:1px solid var(--border); background:transparent; color:var(--muted); padding:8px; cursor:pointer; margin-bottom:8px;}
+  button.action:disabled{opacity:.4; cursor:not-allowed;}
+  .toggle-group{display:flex; gap:6px; margin-bottom:10px;}
+  .toggle-group button{flex:1; font-family:'Inter',sans-serif; font-weight:600; font-size:12px; border-radius:3px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); padding:8px 4px; cursor:pointer;}
+  .toggle-group button.active{background:var(--accent); border-color:var(--accent); color:#1a1200;}
+  label.field{display:block; font-size:10.5px; color:var(--muted); margin-bottom:3px; font-family:'JetBrains Mono',monospace;}
+  input[type=range]{width:100%; accent-color:var(--accent); margin-bottom:8px;}
+  .file-drop{border:2px dashed var(--border); border-radius:6px; padding:12px; text-align:center; font-size:11.5px; color:var(--muted); cursor:pointer; margin-bottom:8px;}
+  .file-drop.loaded{border-color:var(--safe); color:var(--safe);}
+  input[type=file]{display:none;}
+  .hint{font-size:10.5px; color:var(--muted); line-height:1.55; margin-top:4px;}
+  .hint b{color:var(--text);}
+  .log{display:flex; flex-direction:column-reverse; gap:5px; max-height:220px; overflow-y:auto;}
+  .log-row{font-family:'JetBrains Mono',monospace; font-size:11px; padding:6px 8px; border-radius:3px; background:var(--panel-2); border:1px solid var(--border); display:flex; justify-content:space-between;}
+  .log-row .zone{color:var(--accent); font-weight:600;}
+  .log-row.miss .zone{color:var(--danger);}
+  .warn-box{font-size:11px; padding:8px 10px; border-radius:4px; margin-bottom:10px; line-height:1.5; background:rgba(217,83,79,.12); border:1px solid rgba(217,83,79,.35); color:var(--text);}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="topbar">
+    <div>
+      <div class="eyebrow">Beamer Training // Live-Kamera</div>
+      <h1>Kamera-App Prototyp</h1>
+    </div>
+    <div class="badge wait" id="secureBadge">Prüfe Kontext…</div>
+  </div>
+
+  <div class="main">
+    <div class="video-wrap" id="videoWrap">
+      <div class="video-hint" id="videoHint">Kamera noch nicht gestartet.</div>
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay" style="display:none;"></canvas>
+      <div class="hud" id="hud" style="display:none;">
+        <div class="hud-box" id="calibBox">Kalibrierung: <b>läuft…</b></div>
+        <div class="hud-box" id="laserBox">Laser: <b>–</b></div>
+      </div>
+    </div>
+
+    <div class="side">
+      <h2>1. Kamera</h2>
+      <button class="action" id="camBtn" onclick="toggleCamera()">Kamera starten</button>
+      <div class="hint" id="camHint"></div>
+
+      <h2>2. Kalibrierung</h2>
+      <button class="ghost" onclick="recalibrate()">Neu kalibrieren</button>
+      <div class="hint">Alle 4 ArUco-Marker (ID 0-3) müssen im Bild sichtbar sein — Muster über die Stage-App / Präsentationsmodus anzeigen.</div>
+
+      <h2>3. Stage laden (optional)</h2>
+      <div class="file-drop" id="dropStage" onclick="document.getElementById('fileStage').click()">
+        📁 Stage-JSON auswählen<br><span style="opacity:.7">(Export aus dem Stage-Builder)</span>
+      </div>
+      <input type="file" id="fileStage" accept="application/json,.json">
+      <div class="hint" id="stageHint">Ohne Stage: Es wird nur die rohe Bildschirm-Koordinate des Laserpunkts angezeigt, keine Zonen-Zuordnung.</div>
+
+      <h2>4. Laser</h2>
+      <div class="toggle-group">
+        <button id="btnRed" class="active" onclick="setColor('red')">🔴 Rot</button>
+        <button id="btnGreen" onclick="setColor('green')">🟢 Grün</button>
+      </div>
+      <label class="field">Helligkeits-Schwelle: <span id="brightVal">200</span></label>
+      <input type="range" id="brightThresh" min="120" max="254" step="2" value="200">
+      <label class="field">Farbdominanz-Schwelle: <span id="domVal">35</span></label>
+      <input type="range" id="domThresh" min="5" max="120" step="5" value="35">
+
+      <h2>5. Treffer-Log</h2>
+      <button class="ghost" onclick="clearLog()">Log leeren</button>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== js-aruco (jcmellado) — bundled cv.js + aruco.js, MIT License ===== */
+/*
+Copyright (c) 2011 Juan Mellado
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+
+/*
+References:
+- "OpenCV: Open Computer Vision Library"
+  http://sourceforge.net/projects/opencvlibrary/
+- "Stack Blur: Fast But Goodlooking"
+  http://incubator.quasimondo.com/processing/fast_blur_deluxe.php
+*/
+
+var CV = CV || {};
+
+CV.Image = function(width, height, data){
+  this.width = width || 0;
+  this.height = height || 0;
+  this.data = data || [];
+};
+
+CV.grayscale = function(imageSrc, imageDst){
+  var src = imageSrc.data, dst = imageDst.data, len = src.length,
+      i = 0, j = 0;
+
+  for (; i < len; i += 4){
+    dst[j ++] =
+      (src[i] * 0.299 + src[i + 1] * 0.587 + src[i + 2] * 0.114 + 0.5) & 0xff;
+  }
+  
+  imageDst.width = imageSrc.width;
+  imageDst.height = imageSrc.height;
+  
+  return imageDst;
+};
+
+CV.threshold = function(imageSrc, imageDst, threshold){
+  var src = imageSrc.data, dst = imageDst.data,
+      len = src.length, tab = [], i;
+
+  for (i = 0; i < 256; ++ i){
+    tab[i] = i <= threshold? 0: 255;
+  }
+
+  for (i = 0; i < len; ++ i){
+    dst[i] = tab[ src[i] ];
+  }
+
+  imageDst.width = imageSrc.width;
+  imageDst.height = imageSrc.height;
+
+  return imageDst;
+};
+
+CV.adaptiveThreshold = function(imageSrc, imageDst, kernelSize, threshold){
+  var src = imageSrc.data, dst = imageDst.data, len = src.length, tab = [], i;
+
+  CV.stackBoxBlur(imageSrc, imageDst, kernelSize);
+
+  for (i = 0; i < 768; ++ i){
+    tab[i] = (i - 255 <= -threshold)? 255: 0;
+  }
+
+  for (i = 0; i < len; ++ i){
+    dst[i] = tab[ src[i] - dst[i] + 255 ];
+  }
+
+  imageDst.width = imageSrc.width;
+  imageDst.height = imageSrc.height;
+  
+  return imageDst;
+};
+
+CV.otsu = function(imageSrc){
+  var src = imageSrc.data, len = src.length, hist = [],
+      threshold = 0, sum = 0, sumB = 0, wB = 0, wF = 0, max = 0,
+      mu, between, i;
+
+  for (i = 0; i < 256; ++ i){
+    hist[i] = 0;
+  }
+  
+  for (i = 0; i < len; ++ i){
+    hist[ src[i] ] ++;
+  }
+
+  for (i = 0; i < 256; ++ i){
+    sum += hist[i] * i;
+  }
+
+  for (i = 0; i < 256; ++ i){
+    wB += hist[i];
+    if (0 !== wB){
+    
+      wF = len - wB;
+      if (0 === wF){
+        break;
+      }
+
+      sumB += hist[i] * i;
+      
+      mu = (sumB / wB) - ( (sum - sumB) / wF );
+
+      between = wB * wF * mu * mu;
+      
+      if (between > max){
+        max = between;
+        threshold = i;
+      }
+    }
+  }
+
+  return threshold;
+};
+
+CV.stackBoxBlurMult =
+  [1, 171, 205, 293, 57, 373, 79, 137, 241, 27, 391, 357, 41, 19, 283, 265];
+
+CV.stackBoxBlurShift =
+  [0, 9, 10, 11, 9, 12, 10, 11, 12, 9, 13, 13, 10, 9, 13, 13];
+
+CV.BlurStack = function(){
+  this.color = 0;
+  this.next = null;
+};
+
+CV.stackBoxBlur = function(imageSrc, imageDst, kernelSize){
+  var src = imageSrc.data, dst = imageDst.data,
+      height = imageSrc.height, width = imageSrc.width,
+      heightMinus1 = height - 1, widthMinus1 = width - 1,
+      size = kernelSize + kernelSize + 1, radius = kernelSize + 1,
+      mult = CV.stackBoxBlurMult[kernelSize],
+      shift = CV.stackBoxBlurShift[kernelSize],
+      stack, stackStart, color, sum, pos, start, p, x, y, i;
+
+  stack = stackStart = new CV.BlurStack();
+  for (i = 1; i < size; ++ i){
+    stack = stack.next = new CV.BlurStack();
+  }
+  stack.next = stackStart;
+
+  pos = 0;
+
+  for (y = 0; y < height; ++ y){
+    start = pos;
+    
+    color = src[pos];
+    sum = radius * color;
+    
+    stack = stackStart;
+    for (i = 0; i < radius; ++ i){
+      stack.color = color;
+      stack = stack.next;
+    }
+    for (i = 1; i < radius; ++ i){
+      stack.color = src[pos + i];
+      sum += stack.color;
+      stack = stack.next;
+    }
+  
+    stack = stackStart;
+    for (x = 0; x < width; ++ x){
+      dst[pos ++] = (sum * mult) >>> shift;
+      
+      p = x + radius;
+      p = start + (p < widthMinus1? p: widthMinus1);
+      sum -= stack.color - src[p];
+      
+      stack.color = src[p];
+      stack = stack.next;
+    }
+  }
+
+  for (x = 0; x < width; ++ x){
+    pos = x;
+    start = pos + width;
+    
+    color = dst[pos];
+    sum = radius * color;
+    
+    stack = stackStart;
+    for (i = 0; i < radius; ++ i){
+      stack.color = color;
+      stack = stack.next;
+    }
+    for (i = 1; i < radius; ++ i){
+      stack.color = dst[start];
+      sum += stack.color;
+      stack = stack.next;
+      
+      start += width;
+    }
+    
+    stack = stackStart;
+    for (y = 0; y < height; ++ y){
+      dst[pos] = (sum * mult) >>> shift;
+      
+      p = y + radius;
+      p = x + ( (p < heightMinus1? p: heightMinus1) * width );
+      sum -= stack.color - dst[p];
+      
+      stack.color = dst[p];
+      stack = stack.next;
+      
+      pos += width;
+    }
+  }
+
+  return imageDst;
+};
+
+CV.gaussianBlur = function(imageSrc, imageDst, imageMean, kernelSize){
+  var kernel = CV.gaussianKernel(kernelSize);
+
+  imageDst.width = imageSrc.width;
+  imageDst.height = imageSrc.height;
+  
+  imageMean.width = imageSrc.width;
+  imageMean.height = imageSrc.height;
+
+  CV.gaussianBlurFilter(imageSrc, imageMean, kernel, true);
+  CV.gaussianBlurFilter(imageMean, imageDst, kernel, false);
+
+  return imageDst;
+};
+
+CV.gaussianBlurFilter = function(imageSrc, imageDst, kernel, horizontal){
+  var src = imageSrc.data, dst = imageDst.data,
+      height = imageSrc.height, width = imageSrc.width,
+      pos = 0, limit = kernel.length >> 1,
+      cur, value, i, j, k;
+      
+  for (i = 0; i < height; ++ i){
+    
+    for (j = 0; j < width; ++ j){
+      value = 0.0;
+    
+      for (k = -limit; k <= limit; ++ k){
+
+        if (horizontal){
+          cur = pos + k;
+          if (j + k < 0){
+            cur = pos;
+          }
+          else if (j + k >= width){
+            cur = pos;
+          }
+        }else{
+          cur = pos + (k * width);
+          if (i + k < 0){
+            cur = pos;
+          }
+          else if (i + k >= height){
+            cur = pos;
+          }
+        }
+
+        value += kernel[limit + k] * src[cur];
+      }
+    
+      dst[pos ++] = horizontal? value: (value + 0.5) & 0xff;
+    }
+  }
+
+  return imageDst;
+};
+
+CV.gaussianKernel = function(kernelSize){
+  var tab =
+    [ [1],
+      [0.25, 0.5, 0.25],
+      [0.0625, 0.25, 0.375, 0.25, 0.0625],
+      [0.03125, 0.109375, 0.21875, 0.28125, 0.21875, 0.109375, 0.03125] ],
+    kernel = [], center, sigma, scale2X, sum, x, i;
+
+  if ( (kernelSize <= 7) && (kernelSize % 2 === 1) ){
+    kernel = tab[kernelSize >> 1];
+  }else{
+    center = (kernelSize - 1.0) * 0.5;
+    sigma = 0.8 + (0.3 * (center - 1.0) );
+    scale2X = -0.5 / (sigma * sigma);
+    sum = 0.0;
+    for (i = 0; i < kernelSize; ++ i){
+      x = i - center;
+      sum += kernel[i] = Math.exp(scale2X * x * x);
+    }
+    sum = 1 / sum;
+    for (i = 0; i < kernelSize; ++ i){
+      kernel[i] *= sum;
+    }  
+  }
+
+  return kernel;
+};
+
+CV.findContours = function(imageSrc, binary){
+  var width = imageSrc.width, height = imageSrc.height, contours = [],
+      src, deltas, pos, pix, nbd, outer, hole, i, j;
+  
+  src = CV.binaryBorder(imageSrc, binary);
+
+  deltas = CV.neighborhoodDeltas(width + 2);
+
+  pos = width + 3;
+  nbd = 1;
+
+  for (i = 0; i < height; ++ i, pos += 2){
+  
+    for (j = 0; j < width; ++ j, ++ pos){
+      pix = src[pos];
+
+      if (0 !== pix){
+        outer = hole = false;
+
+        if (1 === pix && 0 === src[pos - 1]){
+          outer = true;
+        }
+        else if (pix >= 1 && 0 === src[pos + 1]){
+          hole = true;
+        }
+
+        if (outer || hole){
+          ++ nbd;
+          
+          contours.push( CV.borderFollowing(src, pos, nbd, {x: j, y: i}, hole, deltas) );
+        }
+      }
+    }
+  }  
+
+  return contours;
+};
+
+CV.borderFollowing = function(src, pos, nbd, point, hole, deltas){
+  var contour = [], pos1, pos3, pos4, s, s_end, s_prev;
+
+  contour.hole = hole;
+      
+  s = s_end = hole? 0: 4;
+  do{
+    s = (s - 1) & 7;
+    pos1 = pos + deltas[s];
+    if (src[pos1] !== 0){
+      break;
+    }
+  }while(s !== s_end);
+  
+  if (s === s_end){
+    src[pos] = -nbd;
+    contour.push( {x: point.x, y: point.y} );
+
+  }else{
+    pos3 = pos;
+    s_prev = s ^ 4;
+
+    while(true){
+      s_end = s;
+    
+      do{
+        pos4 = pos3 + deltas[++ s];
+      }while(src[pos4] === 0);
+      
+      s &= 7;
+      
+      if ( ( (s - 1) >>> 0) < (s_end >>> 0) ){
+        src[pos3] = -nbd;
+      }
+      else if (src[pos3] === 1){
+        src[pos3] = nbd;
+      }
+
+      contour.push( {x: point.x, y: point.y} );
+      
+      s_prev = s;
+
+      point.x += CV.neighborhood[s][0];
+      point.y += CV.neighborhood[s][1];
+
+      if ( (pos4 === pos) && (pos3 === pos1) ){
+        break;
+      }
+      
+      pos3 = pos4;
+      s = (s + 4) & 7;
+    }
+  }
+
+  return contour;
+};
+
+CV.neighborhood = 
+  [ [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1] ];
+
+CV.neighborhoodDeltas = function(width){
+  var deltas = [], len = CV.neighborhood.length, i = 0;
+  
+  for (; i < len; ++ i){
+    deltas[i] = CV.neighborhood[i][0] + (CV.neighborhood[i][1] * width);
+  }
+  
+  return deltas.concat(deltas);
+};
+
+CV.approxPolyDP = function(contour, epsilon){
+  var slice = {start_index: 0, end_index: 0},
+      right_slice = {start_index: 0, end_index: 0},
+      poly = [], stack = [], len = contour.length,
+      pt, start_pt, end_pt, dist, max_dist, le_eps,
+      dx, dy, i, j, k;
+  
+  epsilon *= epsilon;
+  
+  k = 0;
+  
+  for (i = 0; i < 3; ++ i){
+    max_dist = 0;
+    
+    k = (k + right_slice.start_index) % len;
+    start_pt = contour[k];
+    if (++ k === len) {k = 0;}
+  
+    for (j = 1; j < len; ++ j){
+      pt = contour[k];
+      if (++ k === len) {k = 0;}
+    
+      dx = pt.x - start_pt.x;
+      dy = pt.y - start_pt.y;
+      dist = dx * dx + dy * dy;
+
+      if (dist > max_dist){
+        max_dist = dist;
+        right_slice.start_index = j;
+      }
+    }
+  }
+
+  if (max_dist <= epsilon){
+    poly.push( {x: start_pt.x, y: start_pt.y} );
+
+  }else{
+    slice.start_index = k;
+    slice.end_index = (right_slice.start_index += slice.start_index);
+  
+    right_slice.start_index -= right_slice.start_index >= len? len: 0;
+    right_slice.end_index = slice.start_index;
+    if (right_slice.end_index < right_slice.start_index){
+      right_slice.end_index += len;
+    }
+    
+    stack.push( {start_index: right_slice.start_index, end_index: right_slice.end_index} );
+    stack.push( {start_index: slice.start_index, end_index: slice.end_index} );
+  }
+
+  while(stack.length !== 0){
+    slice = stack.pop();
+    
+    end_pt = contour[slice.end_index % len];
+    start_pt = contour[k = slice.start_index % len];
+    if (++ k === len) {k = 0;}
+    
+    if (slice.end_index <= slice.start_index + 1){
+      le_eps = true;
+    
+    }else{
+      max_dist = 0;
+
+      dx = end_pt.x - start_pt.x;
+      dy = end_pt.y - start_pt.y;
+      
+      for (i = slice.start_index + 1; i < slice.end_index; ++ i){
+        pt = contour[k];
+        if (++ k === len) {k = 0;}
+        
+        dist = Math.abs( (pt.y - start_pt.y) * dx - (pt.x - start_pt.x) * dy);
+
+        if (dist > max_dist){
+          max_dist = dist;
+          right_slice.start_index = i;
+        }
+      }
+      
+      le_eps = max_dist * max_dist <= epsilon * (dx * dx + dy * dy);
+    }
+    
+    if (le_eps){
+      poly.push( {x: start_pt.x, y: start_pt.y} );
+
+    }else{
+      right_slice.end_index = slice.end_index;
+      slice.end_index = right_slice.start_index;
+
+      stack.push( {start_index: right_slice.start_index, end_index: right_slice.end_index} );
+      stack.push( {start_index: slice.start_index, end_index: slice.end_index} );
+    }
+  }
+  
+  return poly;
+};
+
+CV.warp = function(imageSrc, imageDst, contour, warpSize){
+  var src = imageSrc.data, dst = imageDst.data,
+      width = imageSrc.width, height = imageSrc.height,
+      pos = 0,
+      sx1, sx2, dx1, dx2, sy1, sy2, dy1, dy2, p1, p2, p3, p4,
+      m, r, s, t, u, v, w, x, y, i, j;
+  
+  m = CV.getPerspectiveTransform(contour, warpSize - 1);
+
+  r = m[8];
+  s = m[2];
+  t = m[5];
+  
+  for (i = 0; i < warpSize; ++ i){
+    r += m[7];
+    s += m[1];
+    t += m[4];
+
+    u = r;
+    v = s;
+    w = t;
+    
+    for (j = 0; j < warpSize; ++ j){
+      u += m[6];
+      v += m[0];
+      w += m[3];
+
+      x = v / u;
+      y = w / u;
+
+      sx1 = x >>> 0;
+      sx2 = (sx1 === width - 1)? sx1: sx1 + 1;
+      dx1 = x - sx1;
+      dx2 = 1.0 - dx1;
+
+      sy1 = y >>> 0;
+      sy2 = (sy1 === height - 1)? sy1: sy1 + 1;
+      dy1 = y - sy1;
+      dy2 = 1.0 - dy1;
+
+      p1 = p2 = sy1 * width;
+      p3 = p4 = sy2 * width;
+
+      dst[pos ++] = 
+        (dy2 * (dx2 * src[p1 + sx1] + dx1 * src[p2 + sx2]) +
+         dy1 * (dx2 * src[p3 + sx1] + dx1 * src[p4 + sx2]) ) & 0xff;
+
+    }
+  }
+
+  imageDst.width = warpSize;
+  imageDst.height = warpSize;
+
+  return imageDst;
+};
+
+CV.getPerspectiveTransform = function(src, size){
+  var rq = CV.square2quad(src);
+  
+  rq[0] /= size;
+  rq[1] /= size;
+  rq[3] /= size;
+  rq[4] /= size;
+  rq[6] /= size;
+  rq[7] /= size;
+  
+  return rq;
+};
+
+CV.square2quad = function(src){
+  var sq = [], px, py, dx1, dx2, dy1, dy2, den;
+  
+  px = src[0].x - src[1].x + src[2].x - src[3].x;
+  py = src[0].y - src[1].y + src[2].y - src[3].y;
+  
+  if (0 === px && 0 === py){
+    sq[0] = src[1].x - src[0].x;
+    sq[1] = src[2].x - src[1].x;
+    sq[2] = src[0].x;
+    sq[3] = src[1].y - src[0].y;
+    sq[4] = src[2].y - src[1].y;
+    sq[5] = src[0].y;
+    sq[6] = 0;
+    sq[7] = 0;
+    sq[8] = 1;
+
+  }else{
+    dx1 = src[1].x - src[2].x;
+    dx2 = src[3].x - src[2].x;
+    dy1 = src[1].y - src[2].y;
+    dy2 = src[3].y - src[2].y;
+    den = dx1 * dy2 - dx2 * dy1;
+  
+    sq[6] = (px * dy2 - dx2 * py) / den;
+    sq[7] = (dx1 * py - px * dy1) / den;
+    sq[8] = 1;
+    sq[0] = src[1].x - src[0].x + sq[6] * src[1].x;
+    sq[1] = src[3].x - src[0].x + sq[7] * src[3].x;
+    sq[2] = src[0].x;
+    sq[3] = src[1].y - src[0].y + sq[6] * src[1].y;
+    sq[4] = src[3].y - src[0].y + sq[7] * src[3].y;
+    sq[5] = src[0].y;
+  }
+
+  return sq;
+};
+
+CV.isContourConvex = function(contour){
+  var orientation = 0, convex = true,
+      len = contour.length, i = 0, j = 0,
+      cur_pt, prev_pt, dxdy0, dydx0, dx0, dy0, dx, dy;
+
+  prev_pt = contour[len - 1];
+  cur_pt = contour[0];
+
+  dx0 = cur_pt.x - prev_pt.x;
+  dy0 = cur_pt.y - prev_pt.y;
+
+  for (; i < len; ++ i){
+    if (++ j === len) {j = 0;}
+
+    prev_pt = cur_pt;
+    cur_pt = contour[j];
+
+    dx = cur_pt.x - prev_pt.x;
+    dy = cur_pt.y - prev_pt.y;
+    dxdy0 = dx * dy0;
+    dydx0 = dy * dx0;
+
+    orientation |= dydx0 > dxdy0? 1: (dydx0 < dxdy0? 2: 3);
+
+    if (3 === orientation){
+        convex = false;
+        break;
+    }
+
+    dx0 = dx;
+    dy0 = dy;
+  }
+
+  return convex;
+};
+
+CV.perimeter = function(poly){
+  var len = poly.length, i = 0, j = len - 1,
+      p = 0.0, dx, dy;
+
+  for (; i < len; j = i ++){
+    dx = poly[i].x - poly[j].x;
+    dy = poly[i].y - poly[j].y;
+    
+    p += Math.sqrt(dx * dx + dy * dy) ;
+  }
+
+  return p;
+};
+
+CV.minEdgeLength = function(poly){
+  var len = poly.length, i = 0, j = len - 1, 
+      min = Infinity, d, dx, dy;
+
+  for (; i < len; j = i ++){
+    dx = poly[i].x - poly[j].x;
+    dy = poly[i].y - poly[j].y;
+
+    d = dx * dx + dy * dy;
+
+    if (d < min){
+      min = d;
+    }
+  }
+  
+  return Math.sqrt(min);
+};
+
+CV.countNonZero = function(imageSrc, square){
+  var src = imageSrc.data, height = square.height, width = square.width,
+      pos = square.x + (square.y * imageSrc.width),
+      span = imageSrc.width - width,
+      nz = 0, i, j;
+  
+  for (i = 0; i < height; ++ i){
+
+    for (j = 0; j < width; ++ j){
+    
+      if ( 0 !== src[pos ++] ){
+        ++ nz;
+      }
+    }
+    
+    pos += span;
+  }
+
+  return nz;
+};
+
+CV.binaryBorder = function(imageSrc, dst){
+  var src = imageSrc.data, height = imageSrc.height, width = imageSrc.width,
+      posSrc = 0, posDst = 0, i, j;
+
+  for (j = -2; j < width; ++ j){
+    dst[posDst ++] = 0;
+  }
+
+  for (i = 0; i < height; ++ i){
+    dst[posDst ++] = 0;
+    
+    for (j = 0; j < width; ++ j){
+      dst[posDst ++] = (0 === src[posSrc ++]? 0: 1);
+    }
+    
+    dst[posDst ++] = 0;
+  }
+
+  for (j = -2; j < width; ++ j){
+    dst[posDst ++] = 0;
+  }
+  
+  return dst;
+};
+/*
+Copyright (c) 2011 Juan Mellado
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+
+/*
+References:
+- "ArUco: a minimal library for Augmented Reality applications based on OpenCv"
+  http://www.uco.es/investiga/grupos/ava/node/26
+*/
+
+var AR = AR || {};
+
+AR.Marker = function(id, corners){
+  this.id = id;
+  this.corners = corners;
+};
+
+AR.Detector = function(){
+  this.grey = new CV.Image();
+  this.thres = new CV.Image();
+  this.homography = new CV.Image();
+  this.binary = [];
+  this.contours = [];
+  this.polys = [];
+  this.candidates = [];
+};
+
+AR.Detector.prototype.detect = function(image){
+  CV.grayscale(image, this.grey);
+  CV.adaptiveThreshold(this.grey, this.thres, 2, 7);
+  
+  this.contours = CV.findContours(this.thres, this.binary);
+
+  this.candidates = this.findCandidates(this.contours, image.width * 0.20, 0.05, 10);
+  this.candidates = this.clockwiseCorners(this.candidates);
+  this.candidates = this.notTooNear(this.candidates, 10);
+
+  return this.findMarkers(this.grey, this.candidates, 49);
+};
+
+AR.Detector.prototype.findCandidates = function(contours, minSize, epsilon, minLength){
+  var candidates = [], len = contours.length, contour, poly, i;
+
+  this.polys = [];
+  
+  for (i = 0; i < len; ++ i){
+    contour = contours[i];
+
+    if (contour.length >= minSize){
+      poly = CV.approxPolyDP(contour, contour.length * epsilon);
+
+      this.polys.push(poly);
+
+      if ( (4 === poly.length) && ( CV.isContourConvex(poly) ) ){
+
+        if ( CV.minEdgeLength(poly) >= minLength){
+          candidates.push(poly);
+        }
+      }
+    }
+  }
+
+  return candidates;
+};
+
+AR.Detector.prototype.clockwiseCorners = function(candidates){
+  var len = candidates.length, dx1, dx2, dy1, dy2, swap, i;
+
+  for (i = 0; i < len; ++ i){
+    dx1 = candidates[i][1].x - candidates[i][0].x;
+    dy1 = candidates[i][1].y - candidates[i][0].y;
+    dx2 = candidates[i][2].x - candidates[i][0].x;
+    dy2 = candidates[i][2].y - candidates[i][0].y;
+
+    if ( (dx1 * dy2 - dy1 * dx2) < 0){
+      swap = candidates[i][1];
+      candidates[i][1] = candidates[i][3];
+      candidates[i][3] = swap;
+    }
+  }
+
+  return candidates;
+};
+
+AR.Detector.prototype.notTooNear = function(candidates, minDist){
+  var notTooNear = [], len = candidates.length, dist, dx, dy, i, j, k;
+
+  for (i = 0; i < len; ++ i){
+  
+    for (j = i + 1; j < len; ++ j){
+      dist = 0;
+      
+      for (k = 0; k < 4; ++ k){
+        dx = candidates[i][k].x - candidates[j][k].x;
+        dy = candidates[i][k].y - candidates[j][k].y;
+      
+        dist += dx * dx + dy * dy;
+      }
+      
+      if ( (dist / 4) < (minDist * minDist) ){
+      
+        if ( CV.perimeter( candidates[i] ) < CV.perimeter( candidates[j] ) ){
+          candidates[i].tooNear = true;
+        }else{
+          candidates[j].tooNear = true;
+        }
+      }
+    }
+  }
+
+  for (i = 0; i < len; ++ i){
+    if ( !candidates[i].tooNear ){
+      notTooNear.push( candidates[i] );
+    }
+  }
+
+  return notTooNear;
+};
+
+AR.Detector.prototype.findMarkers = function(imageSrc, candidates, warpSize){
+  var markers = [], len = candidates.length, candidate, marker, i;
+
+  for (i = 0; i < len; ++ i){
+    candidate = candidates[i];
+
+    CV.warp(imageSrc, this.homography, candidate, warpSize);
+  
+    CV.threshold(this.homography, this.homography, CV.otsu(this.homography) );
+
+    marker = this.getMarker(this.homography, candidate);
+    if (marker){
+      markers.push(marker);
+    }
+  }
+  
+  return markers;
+};
+
+AR.Detector.prototype.getMarker = function(imageSrc, candidate){
+  var width = (imageSrc.width / 7) >>> 0,
+      minZero = (width * width) >> 1,
+      bits = [], rotations = [], distances = [],
+      square, pair, inc, i, j;
+
+  for (i = 0; i < 7; ++ i){
+    inc = (0 === i || 6 === i)? 1: 6;
+    
+    for (j = 0; j < 7; j += inc){
+      square = {x: j * width, y: i * width, width: width, height: width};
+      if ( CV.countNonZero(imageSrc, square) > minZero){
+        return null;
+      }
+    }
+  }
+
+  for (i = 0; i < 5; ++ i){
+    bits[i] = [];
+
+    for (j = 0; j < 5; ++ j){
+      square = {x: (j + 1) * width, y: (i + 1) * width, width: width, height: width};
+      
+      bits[i][j] = CV.countNonZero(imageSrc, square) > minZero? 1: 0;
+    }
+  }
+
+  rotations[0] = bits;
+  distances[0] = this.hammingDistance( rotations[0] );
+  
+  pair = {first: distances[0], second: 0};
+  
+  for (i = 1; i < 4; ++ i){
+    rotations[i] = this.rotate( rotations[i - 1] );
+    distances[i] = this.hammingDistance( rotations[i] );
+    
+    if (distances[i] < pair.first){
+      pair.first = distances[i];
+      pair.second = i;
+    }
+  }
+
+  if (0 !== pair.first){
+    return null;
+  }
+
+  return new AR.Marker(
+    this.mat2id( rotations[pair.second] ), 
+    this.rotate2(candidate, 4 - pair.second) );
+};
+
+AR.Detector.prototype.hammingDistance = function(bits){
+  var ids = [ [1,0,0,0,0], [1,0,1,1,1], [0,1,0,0,1], [0,1,1,1,0] ],
+      dist = 0, sum, minSum, i, j, k;
+
+  for (i = 0; i < 5; ++ i){
+    minSum = Infinity;
+    
+    for (j = 0; j < 4; ++ j){
+      sum = 0;
+
+      for (k = 0; k < 5; ++ k){
+          sum += bits[i][k] === ids[j][k]? 0: 1;
+      }
+
+      if (sum < minSum){
+        minSum = sum;
+      }
+    }
+
+    dist += minSum;
+  }
+
+  return dist;
+};
+
+AR.Detector.prototype.mat2id = function(bits){
+  var id = 0, i;
+  
+  for (i = 0; i < 5; ++ i){
+    id <<= 1;
+    id |= bits[i][1];
+    id <<= 1;
+    id |= bits[i][3];
+  }
+
+  return id;
+};
+
+AR.Detector.prototype.rotate = function(src){
+  var dst = [], len = src.length, i, j;
+  
+  for (i = 0; i < len; ++ i){
+    dst[i] = [];
+    for (j = 0; j < src[i].length; ++ j){
+      dst[i][j] = src[src[i].length - j - 1][i];
+    }
+  }
+
+  return dst;
+};
+
+AR.Detector.prototype.rotate2 = function(src, rotation){
+  var dst = [], len = src.length, i;
+  
+  for (i = 0; i < len; ++ i){
+    dst[i] = src[ (rotation + i) % len ];
+  }
+
+  return dst;
+};
+
+</script>
+<script>
+/* ---------------- Sicherer Kontext prüfen ---------------- */
+const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const secureBadge = document.getElementById('secureBadge');
+if(isSecure){
+  secureBadge.textContent = 'Sicherer Kontext ✓';
+  secureBadge.className = 'badge ok';
+} else {
+  secureBadge.textContent = 'Kein HTTPS — Kamera blockiert';
+  secureBadge.className = 'badge bad';
+  document.getElementById('camHint').innerHTML =
+    '<span style="color:var(--danger)">Diese Seite läuft nicht über HTTPS/localhost. Browser verweigern Kamerazugriff dann grundsätzlich. Über HTTPS hosten (z.B. GitHub Pages) und diese URL dort erneut öffnen.</span>';
+  document.getElementById('camBtn').disabled = true;
+}
+
+/* ---------------- State ---------------- */
+let stream = null, running = false;
+let video = document.getElementById('video');
+let overlay = document.getElementById('overlay');
+let octx = overlay.getContext('2d');
+let procCanvas = document.createElement('canvas'); // Verarbeitungs-Auflösung (kleiner, für Performance)
+let pctx = procCanvas.getContext('2d');
+const PROC_W = 640;
+
+let calibrated = false;
+let H_screenToImage = null, H_imageToScreen = null;
+let laserColor = 'red';
+let lastLaserPresent = false;
+let stageData = null; // geparstes Stage-JSON (siehe buildExport() im Stage-Builder)
+let screenWcm = null, screenHcm = null;
+let detector = new AR.Detector();
+
+document.getElementById('brightThresh').addEventListener('input', e=>document.getElementById('brightVal').textContent=e.target.value);
+document.getElementById('domThresh').addEventListener('input', e=>document.getElementById('domVal').textContent=e.target.value);
+function setColor(c){
+  laserColor = c;
+  document.getElementById('btnRed').classList.toggle('active', c==='red');
+  document.getElementById('btnGreen').classList.toggle('active', c==='green');
+}
+
+/* ---------------- Kamera Start/Stop ---------------- */
+async function toggleCamera(){
+  if(running){ stopCamera(); return; }
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:1280}, height:{ideal:720} }, audio:false });
+    video.srcObject = stream;
+    await video.play();
+    document.getElementById('videoHint').style.display='none';
+    overlay.style.display='block';
+    document.getElementById('hud').style.display='flex';
+    document.getElementById('camBtn').textContent = 'Kamera stoppen';
+    document.getElementById('camHint').textContent = '';
+    running = true;
+    requestAnimationFrame(loop);
+  }catch(err){
+    document.getElementById('camHint').innerHTML = `<span style="color:var(--danger)">Kamera-Fehler: ${err.message}</span>`;
+  }
+}
+function stopCamera(){
+  running = false;
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  document.getElementById('camBtn').textContent = 'Kamera starten';
+  document.getElementById('videoHint').style.display='block';
+  document.getElementById('videoHint').textContent = 'Kamera gestoppt.';
+  overlay.style.display='none';
+  document.getElementById('hud').style.display='none';
+}
+function recalibrate(){ calibrated=false; H_screenToImage=null; H_imageToScreen=null; }
+
+/* ---------------- Verarbeitungs-Loop ---------------- */
+function loop(){
+  if(!running) return;
+  if(video.videoWidth > 0){
+    const scale = PROC_W / video.videoWidth;
+    const PROC_H = Math.round(video.videoHeight*scale);
+    procCanvas.width = PROC_W; procCanvas.height = PROC_H;
+    pctx.drawImage(video, 0,0, PROC_W, PROC_H);
+
+    overlay.width = PROC_W; overlay.height = PROC_H;
+    octx.drawImage(procCanvas, 0,0);
+
+    if(!calibrated){
+      tryCalibrate();
+    } else {
+      runLaserFrame();
+    }
+  }
+  setTimeout(()=>requestAnimationFrame(loop), 80); // ~12 fps Verarbeitung, schont Handy-CPU
+}
+
+/* ---------------- Kalibrierung (ArUco, pro Frame versucht) ---------------- */
+const idToKey = {0:'tl', 1:'tr', 2:'br', 3:'bl'};
+function tryCalibrate(){
+  const imageData = pctx.getImageData(0,0,procCanvas.width, procCanvas.height);
+  const markers = detector.detect(imageData);
+  const found = { tl:null, tr:null, br:null, bl:null };
+  markers.forEach(m=>{
+    const key = idToKey[m.id]; if(!key) return;
+    let sx=0, sy=0; m.corners.forEach(p=>{sx+=p.x; sy+=p.y;});
+    found[key] = { x:sx/4, y:sy/4 };
+    // visuelles Feedback
+    octx.strokeStyle = '#e8873a'; octx.lineWidth=2;
+    octx.beginPath();
+    m.corners.forEach((p,i)=> i===0?octx.moveTo(p.x,p.y):octx.lineTo(p.x,p.y));
+    octx.closePath(); octx.stroke();
+  });
+  const foundCount = Object.values(found).filter(Boolean).length;
+  document.getElementById('calibBox').innerHTML = `Kalibrierung: <b>${foundCount}/4 Marker</b>`;
+
+  if(foundCount===4){
+    const srcPts = [[0,0],[1,0],[1,1],[0,1]];
+    const dstPts = [ [found.tl.x,found.tl.y], [found.tr.x,found.tr.y], [found.br.x,found.br.y], [found.bl.x,found.bl.y] ];
+    H_screenToImage = computeHomographyFromPoints(srcPts, dstPts);
+    H_imageToScreen = invert3x3(H_screenToImage);
+    calibrated = true;
+    document.getElementById('calibBox').innerHTML = 'Kalibrierung: <b style="color:var(--safe)">✓ OK</b>';
+  }
+}
+
+/* ---------------- Homographie-Helfer (identisch zum Kalibrierungs-Tool, verifiziert) ---------------- */
+function solveLinearSystem(A,b){
+  const n=b.length;
+  for(let i=0;i<n;i++) A[i].push(b[i]);
+  for(let col=0; col<n; col++){
+    let maxRow=col;
+    for(let r=col+1;r<n;r++) if(Math.abs(A[r][col])>Math.abs(A[maxRow][col])) maxRow=r;
+    [A[col],A[maxRow]]=[A[maxRow],A[col]];
+    if(Math.abs(A[col][col])<1e-12) continue;
+    for(let r=0;r<n;r++){ if(r===col) continue; const f=A[r][col]/A[col][col]; for(let c=col;c<=n;c++) A[r][c]-=f*A[col][c]; }
+  }
+  const x=new Array(n).fill(0);
+  for(let i=0;i<n;i++) x[i]=Math.abs(A[i][i])>1e-12?A[i][n]/A[i][i]:0;
+  return x;
+}
+function computeHomographyFromPoints(srcPts,dstPts){
+  const A=[],b=[];
+  for(let i=0;i<4;i++){ const [x,y]=srcPts[i]; const [u,v]=dstPts[i];
+    A.push([x,y,1,0,0,0,-x*u,-y*u]); b.push(u);
+    A.push([0,0,0,x,y,1,-x*v,-y*v]); b.push(v);
+  }
+  const h=solveLinearSystem(A,b);
+  return [h[0],h[1],h[2],h[3],h[4],h[5],h[6],h[7],1];
+}
+function applyHomography(H,x,y){ const w=H[6]*x+H[7]*y+H[8]; return [(H[0]*x+H[1]*y+H[2])/w, (H[3]*x+H[4]*y+H[5])/w]; }
+function invert3x3(m){
+  const [a,b,c,d,e,f,g,h,i]=m;
+  const A=(e*i-f*h), B=-(d*i-f*g), C=(d*h-e*g);
+  const D=-(b*i-c*h), E=(a*i-c*g), F=-(a*h-b*g);
+  const G=(b*f-c*e), Hh=-(a*f-c*d), I=(a*e-b*d);
+  const det=a*A+b*B+c*C;
+  if(Math.abs(det)<1e-12) return null;
+  return [A/det,D/det,G/det, B/det,E/det,Hh/det, C/det,F/det,I/det];
+}
+
+/* ---------------- Laser-Erkennung pro Frame (Einzelbild, wie im Foto-Prototyp verifiziert) ---------------- */
+function findLargestComponent(mask, gridW, gridH){
+  const visited = new Uint8Array(gridW*gridH);
+  let bestCells=null, bestSize=0;
+  const stack=[];
+  for(let gy=0; gy<gridH; gy++) for(let gx=0; gx<gridW; gx++){
+    const idx=gy*gridW+gx;
+    if(!mask[idx]||visited[idx]) continue;
+    const cells=[]; stack.length=0; stack.push(idx); visited[idx]=1;
+    while(stack.length){
+      const cur=stack.pop(); cells.push(cur);
+      const cx=cur%gridW, cy=(cur/gridW)|0;
+      for(const [nx,ny] of [[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]]){
+        if(nx<0||nx>=gridW||ny<0||ny>=gridH) continue;
+        const nIdx=ny*gridW+nx;
+        if(mask[nIdx] && !visited[nIdx]){ visited[nIdx]=1; stack.push(nIdx); }
+      }
+    }
+    if(cells.length>bestSize){ bestSize=cells.length; bestCells=cells; }
+  }
+  return { cells:bestCells, size:bestSize };
+}
+
+function runLaserFrame(){
+  const w=procCanvas.width, h=procCanvas.height;
+  const data = pctx.getImageData(0,0,w,h).data;
+  const brightThresh = parseFloat(document.getElementById('brightThresh').value);
+  const domThresh = parseFloat(document.getElementById('domThresh').value);
+  const mask = new Uint8Array(w*h);
+
+  for(let i=0;i<w*h;i++){
+    const px=i*4;
+    const r=data[px], g=data[px+1], b=data[px+2];
+    const target = laserColor==='red' ? r : g;
+    const others = laserColor==='red' ? Math.max(g,b) : Math.max(r,b);
+    if(target>brightThresh && (target-others)>domThresh) mask[i]=1;
+  }
+
+  const { cells, size } = findLargestComponent(mask, w, h);
+  const laserBox = document.getElementById('laserBox');
+
+  if(cells && size>=3){
+    let sx=0, sy=0;
+    for(const idx of cells){ sx+=idx%w; sy+=(idx/w)|0; }
+    const px = sx/cells.length, py = sy/cells.length;
+    const [normX, normY] = applyHomography(H_imageToScreen, px, py);
+
+    octx.strokeStyle = '#fff'; octx.lineWidth=2;
+    octx.beginPath(); octx.arc(px,py,10,0,2*Math.PI); octx.stroke();
+
+    laserBox.innerHTML = `Laser: <b>x=${normX.toFixed(2)} y=${normY.toFixed(2)}</b>`;
+
+    if(!lastLaserPresent){ // neuer "Schuss" (Punkt war vorher nicht sichtbar)
+      registerHit(normX, normY);
+    }
+    lastLaserPresent = true;
+  } else {
+    laserBox.innerHTML = `Laser: <b>–</b>`;
+    lastLaserPresent = false;
+  }
+}
+
+/* ---------------- Stage laden & Zonen-Hit-Test ---------------- */
+document.getElementById('fileStage').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    try{
+      stageData = JSON.parse(ev.target.result);
+      const diagCm = stageData.stage.screenDiagonalInch * 2.54;
+      const aspect = stageData.stage.aspectRatio;
+      screenHcm = diagCm / Math.sqrt(aspect*aspect+1);
+      screenWcm = screenHcm * aspect;
+      document.getElementById('dropStage').classList.add('loaded');
+      document.getElementById('dropStage').innerHTML = `✓ ${stageData.stage.name} (${stageData.targets.length} Targets)`;
+      document.getElementById('stageHint').textContent = 'Stage geladen — Treffer werden jetzt Zonen zugeordnet.';
+    }catch(err){
+      alert('Konnte Stage-JSON nicht lesen: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+function pointInPolygon(px,py, poly){ // poly: [[x,y],...] normalisiert 0..1
+  let inside=false;
+  for(let i=0,j=poly.length-1; i<poly.length; j=i++){
+    const [xi,yi]=poly[i], [xj,yj]=poly[j];
+    if( (yi>py)!==(yj>py) && px < (xj-xi)*(py-yi)/(yj-yi)+xi ) inside=!inside;
+  }
+  return inside;
+}
+
+function hitTestStage(normX, normY){
+  if(!stageData || screenWcm==null) return null;
+  const hitXcm = normX*screenWcm, hitYcm = normY*screenHcm;
+
+  for(const t of stageData.targets){
+    const scale = stageData.stage.screenDistanceM / t.distanceM;
+    const foreshorten = Math.max(0.12, Math.abs(Math.cos(t.rotationDeg*Math.PI/180)));
+    const wCm = t.widthCm*scale*foreshorten, hCm = t.heightCm*scale;
+    const cxCm = screenWcm/2 + t.lateralM*100*scale;
+    const bottomCm = screenHcm - t.heightM*100*scale;
+    const topCm = bottomCm - hCm, leftCm = cxCm - wCm/2;
+
+    const lx = (hitXcm-leftCm)/wCm, ly = (hitYcm-topCm)/hCm; // 0..1 lokal im Target
+    if(lx<0||lx>1||ly<0||ly>1) continue;
+
+    if(t.parts){
+      for(const part of t.parts){
+        // NS zuerst prüfen (überschreibt A/C/D), dann höchster Score zuerst
+        const ordered = [...part.zones].sort((a,b)=> (b.noShoot?1:0)-(a.noShoot?1:0) || b.score-a.score);
+        for(const z of ordered){
+          if(pointInPolygon(lx,ly, z.pointsNormalized)) return { targetId:t.id, zone:z.name, score:z.score, noShoot:!!z.noShoot };
+        }
+      }
+    } else if(t.rings){
+      const [cx,cy] = t.centerNormalized;
+      const sorted = [...t.rings].sort((a,b)=>a.rxNormalized-b.rxNormalized); // kleinster Radius zuerst
+      for(const r of sorted){
+        const dx=(lx-cx)/r.rxNormalized, dy=(ly-cy)/r.ryNormalized;
+        if(dx*dx+dy*dy<=1) return { targetId:t.id, zone:r.name, score:r.score };
+      }
+    }
+    return { targetId:t.id, zone:'Miss', score:0 }; // im Bounding-Box, aber außerhalb aller Zonen
+  }
+  return null; // außerhalb aller Targets
+}
+
+/* ---------------- Treffer-Log ---------------- */
+function registerHit(normX, normY){
+  const result = hitTestStage(normX, normY);
+  const row = document.createElement('div');
+  row.className = 'log-row' + (result && (result.zone==='Miss'||result.noShoot) ? ' miss':'');
+  const time = new Date().toLocaleTimeString('de-DE');
+  if(result){
+    row.innerHTML = `<span>${time} · Target ${result.targetId}</span><span class="zone">${result.zone}${result.score?(' ('+result.score+')'):''}</span>`;
+  } else {
+    row.innerHTML = `<span>${time} · x=${normX.toFixed(2)} y=${normY.toFixed(2)}</span><span class="zone">kein Target</span>`;
+  }
+  document.getElementById('log').appendChild(row);
+}
+function clearLog(){ document.getElementById('log').innerHTML=''; }
+</script>
+</body>
+</html>

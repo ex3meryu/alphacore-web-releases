@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laser-Punkt-Erkennung — Prototyp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#14161a; --panel:#1c1f24; --panel-2:#20242a; --border:#2c3038;
+    --text:#e8e6e1; --muted:#8b8f97; --accent:#e8873a; --safe:#6fcf7b; --danger:#d9534f;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%; margin:0;}
+  body{background:var(--bg-deep); color:var(--text); font-family:'Inter',system-ui,sans-serif;}
+  .topbar{
+    display:flex; align-items:center; gap:10px; padding:12px 16px;
+    background:var(--panel); border-bottom:1px solid var(--border);
+  }
+  .topbar .eyebrow{font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; color:var(--accent); text-transform:uppercase;}
+  .topbar h1{font-family:'Oswald',sans-serif; font-size:16px; font-weight:600; margin:0; text-transform:uppercase; letter-spacing:.02em;}
+
+  .layout{display:flex; height:calc(100vh - 49px);}
+  .side{width:340px; min-width:340px; background:var(--panel); border-right:1px solid var(--border); padding:16px; overflow-y:auto;}
+  .side h2{font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0 0 10px; display:flex; align-items:center; gap:8px;}
+  .side h2::before{content:''; width:3px; height:12px; background:var(--accent); display:inline-block;}
+  .file-drop{
+    border:2px dashed var(--border); border-radius:6px; padding:16px; text-align:center;
+    font-size:12px; color:var(--muted); cursor:pointer; margin-bottom:10px;
+  }
+  .file-drop:hover{border-color:var(--accent); color:var(--text);}
+  .file-drop.loaded{border-color:var(--safe); color:var(--safe);}
+  input[type=file]{display:none;}
+  label.field{display:block; font-size:11px; color:var(--muted); margin-bottom:4px; font-family:'JetBrains Mono',monospace;}
+  input[type=range]{width:100%; accent-color:var(--accent); margin-bottom:10px;}
+  .toggle-group{display:flex; gap:6px; margin-bottom:14px;}
+  .toggle-group button{
+    flex:1; font-family:'Inter',sans-serif; font-weight:600; font-size:12.5px; border-radius:3px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text); padding:9px 6px; cursor:pointer;
+  }
+  .toggle-group button.active{background:var(--accent); border-color:var(--accent); color:#1a1200;}
+  button.action{
+    width:100%; font-family:'Inter',sans-serif; font-weight:600; font-size:13px; border-radius:3px;
+    border:1px solid var(--accent); background:var(--accent); color:#1a1200; padding:10px; cursor:pointer; margin-bottom:10px;
+  }
+  button.action:disabled{opacity:.4; cursor:not-allowed;}
+  button.ghost{
+    width:100%; font-family:'Inter',sans-serif; font-weight:600; font-size:12px; border-radius:3px;
+    border:1px solid var(--border); background:transparent; color:var(--muted); padding:8px; cursor:pointer; margin-bottom:10px;
+  }
+  .readout{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:4px; padding:10px;
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.7; color:var(--muted); min-height:40px; margin-bottom:12px;
+  }
+  .readout b{color:var(--accent);}
+  .readout .ok{color:var(--safe);}
+  .readout .bad{color:var(--danger);}
+  .hint{font-size:11px; color:var(--muted); line-height:1.6; margin-top:4px;}
+  .mode-note{
+    font-size:11px; padding:8px 10px; border-radius:4px; margin-bottom:12px; line-height:1.5;
+    background:rgba(232,135,58,.1); border:1px solid rgba(232,135,58,.3); color:var(--text);
+  }
+
+  .canvas-wrap{flex:1; display:flex; align-items:center; justify-content:center; background:#0c0d0f; position:relative; overflow:auto;}
+  #photoCanvas{max-width:100%; max-height:100%; cursor:crosshair; box-shadow:0 0 0 1px var(--border);}
+  .empty-state{color:var(--muted); font-family:'JetBrains Mono',monospace; font-size:13px; text-align:center; padding:20px;}
+  .zoom-box{
+    position:absolute; bottom:16px; right:16px; width:180px; height:180px;
+    background:#000; border:2px solid var(--accent); border-radius:4px; overflow:hidden; display:none;
+  }
+  .zoom-box canvas{width:100%; height:100%; image-rendering:pixelated;}
+  .zoom-label{
+    position:absolute; bottom:200px; right:16px; font-family:'JetBrains Mono',monospace;
+    font-size:10px; color:var(--muted); display:none;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="eyebrow">Beamer Training // Kamera-App Baustein</div>
+    <h1>Laser-Punkt-Erkennung</h1>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="side">
+    <h2>1. Foto mit Laserpunkt</h2>
+    <div class="file-drop" id="dropMain" onclick="document.getElementById('fileMain').click()">
+      📁 Foto auswählen<br><span style="opacity:.7">(Laser an, auf Wand/Fläche gerichtet)</span>
+    </div>
+    <input type="file" id="fileMain" accept="image/*">
+
+    <h2>2. Referenzfoto (optional, empfohlen)</h2>
+    <div class="file-drop" id="dropRef" onclick="document.getElementById('fileRef').click()">
+      📁 Referenzfoto auswählen<br><span style="opacity:.7">(gleiche Position, Laser AUS)</span>
+    </div>
+    <input type="file" id="fileRef" accept="image/*">
+    <button class="ghost" onclick="clearRef()">Referenzfoto entfernen</button>
+
+    <h2>3. Laserfarbe</h2>
+    <div class="toggle-group">
+      <button id="btnRed" class="active" onclick="setColor('red')">🔴 Rot</button>
+      <button id="btnGreen" onclick="setColor('green')">🟢 Grün</button>
+    </div>
+
+    <h2>4. Empfindlichkeit</h2>
+    <label class="field">Helligkeits-Schwelle: <span id="brightVal">200</span></label>
+    <input type="range" id="brightThresh" min="120" max="254" step="2" value="200">
+    <label class="field">Farbdominanz-Schwelle: <span id="domVal">35</span></label>
+    <input type="range" id="domThresh" min="5" max="120" step="5" value="35">
+    <div class="hint" id="modeHint" style="margin-bottom:12px;">Ohne Referenzfoto: Punkt muss hell UND farblich dominant sein.</div>
+
+    <button class="action" id="detectBtn" disabled onclick="runDetection()">Laserpunkt erkennen</button>
+
+    <h2>5. Ergebnis</h2>
+    <div class="readout" id="resultReadout">Noch kein Foto ausgewertet.</div>
+
+    <div class="hint">
+      <b style="color:var(--text)">Tipp:</b> Raum eher dunkel, Laser auf eine matte, nicht spiegelnde Fläche richten.
+      Mit Referenzfoto (Laser aus, exakt gleiche Kameraposition) wird die Erkennung deutlich robuster, weil helle/rote
+      Hintergrundobjekte automatisch rausgerechnet werden.<br><br>
+      Wichtiger Hinweis zur Belichtung: Handy-Kamera-APIs geben im Browser meist keine manuelle Kontrolle über
+      Belichtungszeit/ISO her (anders als bei AlphaCores Picamera2-Setup). Das hier getestete Verfahren arbeitet daher
+      rein über Bildanalyse nach der Aufnahme, nicht über eine kurze Verschlusszeit wie beim Pi-Kamera-Ansatz.
+      Das ist ein bewusster erster Test – reicht der Kontrast so nicht aus, müssen wir für die Live-Version separat
+      nach Kamera-Constraints (z.B. ImageCapture-API) suchen, die etwas mehr Kontrolle erlauben.
+    </div>
+  </div>
+
+  <div class="canvas-wrap" id="canvasWrap">
+    <div class="empty-state" id="emptyState">Noch kein Foto geladen.</div>
+    <canvas id="photoCanvas" style="display:none;"></canvas>
+    <div class="zoom-label" id="zoomLabel">Zoom auf erkannten Punkt</div>
+    <div class="zoom-box" id="zoomBox"><canvas id="zoomCanvas"></canvas></div>
+  </div>
+</div>
+
+<script>
+let mainImg = null, refImg = null;
+let canvas = document.getElementById('photoCanvas');
+let ctx = canvas.getContext('2d');
+let laserColor = 'red';
+let detectedPoint = null; // {x,y,size,peakVal}
+
+document.getElementById('brightThresh').addEventListener('input', e=>{
+  document.getElementById('brightVal').textContent = e.target.value;
+});
+document.getElementById('domThresh').addEventListener('input', e=>{
+  document.getElementById('domVal').textContent = e.target.value;
+});
+
+function setColor(c){
+  laserColor = c;
+  document.getElementById('btnRed').classList.toggle('active', c==='red');
+  document.getElementById('btnGreen').classList.toggle('active', c==='green');
+}
+
+function loadImageFile(file, cb){
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    const im = new Image();
+    im.onload = ()=>cb(im);
+    im.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+document.getElementById('fileMain').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  loadImageFile(file, im=>{
+    mainImg = im;
+    const MAXW = 1100;
+    const scale = Math.min(1, MAXW/im.width);
+    canvas.width = Math.round(im.width*scale);
+    canvas.height = Math.round(im.height*scale);
+    ctx.drawImage(im,0,0,canvas.width,canvas.height);
+    canvas.style.display='block';
+    document.getElementById('emptyState').style.display='none';
+    document.getElementById('detectBtn').disabled = false;
+    document.getElementById('dropMain').classList.add('loaded');
+    document.getElementById('dropMain').innerHTML = '✓ Foto geladen<br><span style="opacity:.7">Klicken zum Ersetzen</span>';
+    detectedPoint = null;
+    document.getElementById('zoomBox').style.display='none';
+    document.getElementById('zoomLabel').style.display='none';
+    document.getElementById('resultReadout').textContent = 'Bereit — auf "Laserpunkt erkennen" klicken.';
+    updateModeHint();
+  });
+});
+document.getElementById('fileRef').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  loadImageFile(file, im=>{
+    refImg = im;
+    document.getElementById('dropRef').classList.add('loaded');
+    document.getElementById('dropRef').innerHTML = '✓ Referenzfoto geladen<br><span style="opacity:.7">Klicken zum Ersetzen</span>';
+    updateModeHint();
+  });
+});
+function clearRef(){
+  refImg = null;
+  document.getElementById('dropRef').classList.remove('loaded');
+  document.getElementById('dropRef').innerHTML = '📁 Referenzfoto auswählen<br><span style="opacity:.7">(gleiche Position, Laser AUS)</span>';
+  document.getElementById('fileRef').value = '';
+  updateModeHint();
+}
+function updateModeHint(){
+  document.getElementById('modeHint').textContent = refImg
+    ? 'Mit Referenzfoto: Es wird die Differenz zum Referenzbild ausgewertet (robuster).'
+    : 'Ohne Referenzfoto: Punkt muss hell UND farblich dominant sein.';
+}
+
+/* ---------------- Connected-Component Flood-Fill (wie im Kalibrierungs-Tool) ---------------- */
+function findLargestComponent(mask, gridW, gridH){
+  const visited = new Uint8Array(gridW*gridH);
+  let bestCells = null, bestSize = 0;
+  const stack = [];
+  for(let gy=0; gy<gridH; gy++){
+    for(let gx=0; gx<gridW; gx++){
+      const idx = gy*gridW+gx;
+      if(!mask[idx] || visited[idx]) continue;
+      const cells = [];
+      stack.length=0; stack.push(idx); visited[idx]=1;
+      while(stack.length){
+        const cur = stack.pop();
+        cells.push(cur);
+        const cx = cur % gridW, cy = (cur/gridW)|0;
+        const neigh = [[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]];
+        for(const [nx,ny] of neigh){
+          if(nx<0||nx>=gridW||ny<0||ny>=gridH) continue;
+          const nIdx = ny*gridW+nx;
+          if(mask[nIdx] && !visited[nIdx]){ visited[nIdx]=1; stack.push(nIdx); }
+        }
+      }
+      if(cells.length > bestSize){ bestSize=cells.length; bestCells=cells; }
+    }
+  }
+  return { cells:bestCells, size:bestSize };
+}
+
+/* ---------------- Erkennung ---------------- */
+function runDetection(){
+  const w = canvas.width, h = canvas.height;
+  const mainData = ctx.getImageData(0,0,w,h).data;
+
+  const brightThresh = parseFloat(document.getElementById('brightThresh').value);
+  const domThresh = parseFloat(document.getElementById('domThresh').value);
+
+  let refData = null;
+  if(refImg){
+    const tmp = document.createElement('canvas');
+    tmp.width = w; tmp.height = h;
+    const tctx = tmp.getContext('2d');
+    tctx.drawImage(refImg, 0,0, w, h); // auf gleiche Canvas-Größe skaliert (setzt gleiche Kameraposition voraus)
+    refData = tctx.getImageData(0,0,w,h).data;
+  }
+
+  const mask = new Uint8Array(w*h);
+  const chIdx = laserColor==='red' ? 0 : 1; // R oder G Kanal
+  let maxPeak = 0;
+
+  for(let i=0;i<w*h;i++){
+    const px = i*4;
+    const r=mainData[px], g=mainData[px+1], b=mainData[px+2];
+    const target = laserColor==='red' ? r : g;
+    const others = laserColor==='red' ? Math.max(g,b) : Math.max(r,b);
+    let candidate;
+
+    if(refData){
+      const rr=refData[px], rg=refData[px+1], rb=refData[px+2];
+      const refTarget = laserColor==='red' ? rr : rg;
+      const delta = target - refTarget; // Zunahme im Zielkanal gegenüber Referenz
+      candidate = delta > brightThresh*0.55 && target > 100; // Differenz-Schwelle (skaliert von Helligkeits-Regler)
+    } else {
+      candidate = target > brightThresh && (target - others) > domThresh;
+    }
+
+    if(candidate){ mask[i]=1; if(target>maxPeak) maxPeak=target; }
+  }
+
+  const { cells, size } = findLargestComponent(mask, w, h);
+  const resultEl = document.getElementById('resultReadout');
+
+  if(cells && size >= 3){
+    let sx=0, sy=0;
+    for(const idx of cells){ sx += idx % w; sy += (idx/w)|0; }
+    const cx = sx/cells.length, cy = sy/cells.length;
+    detectedPoint = { x:cx, y:cy, size, peakVal:maxPeak };
+    resultEl.innerHTML =
+      `<span class="ok">✓ Laserpunkt gefunden</span><br>` +
+      `Position (Foto-Px): <b>${cx.toFixed(0)}, ${cy.toFixed(0)}</b><br>` +
+      `Fläche: <b>${size}px</b> · Spitzenwert: <b>${maxPeak}</b>/255` +
+      (size>400 ? `<br><span class="bad">Fläche ungewöhnlich groß – evtl. Fehltreffer (Reflexion/Fremdlicht)?</span>` : '');
+  } else {
+    detectedPoint = null;
+    resultEl.innerHTML = `<span class="bad">✗ Kein eindeutiger Laserpunkt gefunden</span><br>Schwellen anpassen oder Raum abdunkeln.`;
+  }
+
+  drawOverlay();
+}
+
+function drawOverlay(){
+  ctx.drawImage(mainImg, 0,0, canvas.width, canvas.height);
+  if(!detectedPoint) return;
+  const { x, y } = detectedPoint;
+  ctx.strokeStyle = '#e8873a'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x,y,14,0,2*Math.PI); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x-20,y); ctx.lineTo(x+20,y); ctx.moveTo(x,y-20); ctx.lineTo(x,y+20); ctx.stroke();
+
+  // Zoom-Ausschnitt
+  const zoomBox = document.getElementById('zoomBox');
+  const zoomCanvas = document.getElementById('zoomCanvas');
+  const zctx = zoomCanvas.getContext('2d');
+  const cropSize = 40;
+  zoomCanvas.width = cropSize; zoomCanvas.height = cropSize;
+  zctx.imageSmoothingEnabled = false;
+  zctx.drawImage(canvas, Math.max(0,x-cropSize/2), Math.max(0,y-cropSize/2), cropSize, cropSize, 0,0, cropSize, cropSize);
+  zoomBox.style.display='block';
+  document.getElementById('zoomLabel').style.display='block';
+}
+</script>
+</body>
+</html>

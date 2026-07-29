@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stage Builder — Beamer Training</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#14161a;
+    --panel:#1c1f24;
+    --panel-2:#20242a;
+    --border:#2c3038;
+    --text:#e8e6e1;
+    --muted:#8b8f97;
+    --accent:#e8873a;
+    --safe:#6fcf7b;
+    --danger:#d9534f;
+    --cardboard:#c9a876;
+    --zone-line:#2b2620;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{background:var(--bg-deep); color:var(--text); font-family:'Inter',system-ui,sans-serif; overflow:hidden;}
+  .app{display:flex; height:100vh; width:100vw;}
+
+  .sidebar{width:310px; min-width:310px; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto;}
+  .sidebar.hidden{display:none;}
+  .brand{padding:18px 18px 14px; border-bottom:1px solid var(--border);}
+  .brand .eyebrow{font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; color:var(--accent); text-transform:uppercase;}
+  .brand h1{font-family:'Oswald',sans-serif; font-weight:600; font-size:20px; letter-spacing:.02em; margin:4px 0 0; text-transform:uppercase;}
+  .section{padding:16px 18px; border-bottom:1px solid var(--border);}
+  .section h2{font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0 0 12px; display:flex; align-items:center; gap:8px;}
+  .section h2::before{content:''; width:3px; height:12px; background:var(--accent); display:inline-block;}
+  label{display:block; font-size:11px; color:var(--muted); margin-bottom:4px; font-family:'JetBrains Mono',monospace; letter-spacing:.03em;}
+  input[type=text], input[type=number], select{
+    width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    padding:7px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace; font-size:13px; margin-bottom:10px;
+  }
+  input[type=range]{width:100%; margin-bottom:10px; accent-color:var(--accent);}
+  .row{display:flex; gap:8px;} .row > div{flex:1;}
+  button{font-family:'Inter',sans-serif; font-weight:600; font-size:12.5px; border-radius:3px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); padding:9px 10px; cursor:pointer; transition:border-color .15s, background .15s;}
+  button:hover{border-color:var(--accent);}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#1a1200;}
+  button.primary:hover{background:#f5975a;}
+  button.ghost{background:transparent;}
+  button.danger{color:var(--danger); border-color:var(--danger);}
+  button.danger:hover{background:rgba(217,83,79,.12);}
+  button.block{width:100%; margin-bottom:8px;}
+  .add-row{display:flex; gap:6px; margin-bottom:8px;}
+  .add-row select{margin-bottom:0;}
+  .add-row button{white-space:nowrap;}
+
+  .target-list{display:flex; flex-direction:column; gap:6px; margin-bottom:4px;}
+  .target-item{display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:var(--panel-2); border:1px solid var(--border); border-radius:3px; font-size:12px; cursor:pointer;}
+  .target-item.active{border-color:var(--accent); background:rgba(232,135,58,.1);}
+  .target-item .tag{font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted);}
+  .empty-hint{font-size:12px; color:var(--muted); font-style:italic; padding:6px 0;}
+  .stage-list{max-height:140px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; margin-bottom:8px;}
+  .stage-list-item{display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:6px 8px; background:var(--panel-2); border:1px solid var(--border); border-radius:3px;}
+  .stage-list-item span{cursor:pointer;} .stage-list-item span:hover{color:var(--accent);}
+  .status-msg{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--safe); min-height:14px; margin-top:4px;}
+  .status-msg.err{color:var(--danger);}
+  .hint{font-size:10.5px; color:var(--muted); line-height:1.5; margin:-4px 0 10px;}
+
+  .stage-wrap{flex:1; position:relative; display:flex; align-items:center; justify-content:center; background: radial-gradient(ellipse at 50% 0%, #23272d 0%, #101215 70%);}
+  .hud{position:absolute; top:14px; left:14px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); background:rgba(20,22,26,.6); border:1px solid var(--border); padding:8px 10px; border-radius:3px; line-height:1.6; pointer-events:none; z-index:5;}
+  .hud b{color:var(--accent);}
+  .fs-btn{position:absolute; top:14px; right:14px; z-index:5;}
+  .exit-fs-btn{position:fixed; top:16px; right:16px; z-index:50; opacity:.35;}
+  .exit-fs-btn:hover{opacity:1;}
+  svg{display:block;}
+  .target-hit{cursor:grab;} .target-hit:active{cursor:grabbing;}
+  .target-selected-outline{fill:none; stroke:var(--accent); stroke-width:2; stroke-dasharray:6 4; vector-effect:non-scaling-stroke;}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <div class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="eyebrow">Beamer Training // Szenario 2</div>
+      <h1>Stage Builder</h1>
+    </div>
+
+    <div class="section">
+      <h2>Bildschirm-Setup</h2>
+      <label>Stage-Name</label>
+      <input type="text" id="stageName" value="Neue Stage">
+      <div class="row">
+        <div><label>Diagonale (Zoll)</label><input type="number" id="diagIn" value="100" min="20" max="400"></div>
+        <div><label>Schützen-Abstand (m)</label><input type="number" id="screenDist" value="2.5" min="0.5" max="10" step="0.1"></div>
+      </div>
+      <label>Seitenverhältnis</label>
+      <select id="aspect">
+        <option value="1.777">16:9</option>
+        <option value="1.6">16:10</option>
+        <option value="1.333">4:3</option>
+      </select>
+    </div>
+
+    <div class="section">
+      <h2>Target hinzufügen</h2>
+      <div class="add-row">
+        <select id="typeSelect">
+          <option value="ipsc_classic">IPSC Classic</option>
+          <option value="ipsc_classic_ns">IPSC Classic No-Shoot</option>
+          <option value="ipsc_mini">IPSC Mini</option>
+          <option value="ipsc_mini_double">IPSC Mini Double</option>
+          <option value="ipsc_classic_half_left">IPSC Classic Half (links)</option>
+          <option value="ipsc_classic_half_right">IPSC Classic Half (rechts)</option>
+          <option value="uspsa">USPSA Metric</option>
+          <option value="plate">Steel Plate</option>
+          <option value="prazision">Präzision (Ringscheibe)</option>
+        </select>
+        <button class="primary" onclick="addTarget(document.getElementById('typeSelect').value)">+</button>
+      </div>
+      <div class="target-list" id="targetList"></div>
+    </div>
+
+    <div class="section" id="editorSection" style="display:none;">
+      <h2>Ausgewähltes Target</h2>
+      <label>Typ</label>
+      <input type="text" id="edType" disabled>
+      <div class="row">
+        <div><label>Entfernung (m)</label><input type="number" id="edDist" step="0.1" min="1" max="60"></div>
+        <div><label>Seitlich (m, +re/-li)</label><input type="number" id="edLateral" step="0.1" min="-15" max="15"></div>
+      </div>
+      <label>Höhe Unterkante über Boden (m)</label>
+      <input type="number" id="edHeight" step="0.05" min="0" max="2.5">
+      <label>Größe (% der AlphaCore-Basisgröße): <span id="scaleVal">100%</span></label>
+      <input type="range" id="edScale" min="50" max="400" step="5" value="100">
+      <div class="hint" id="scaleHint"></div>
+      <label>Winkel zur Waffe (Foreshortening): <span id="rotVal">0°</span></label>
+      <input type="range" id="edRot" min="-75" max="75" step="1" value="0">
+      <button class="block danger" onclick="deleteSelected()">Target löschen</button>
+    </div>
+
+    <div class="section">
+      <h2>Stage</h2>
+      <button class="block ghost" onclick="toggleView()" id="viewToggleBtn">Ansicht: Editor</button>
+      <button class="block primary" onclick="enterFullscreen()">▶ Präsentation (Beamer)</button>
+    </div>
+
+    <div class="section">
+      <h2>Speichern / Laden</h2>
+      <button class="block" onclick="saveStage()">Stage speichern</button>
+      <div class="stage-list" id="stageList"><div class="empty-hint">Lade Liste…</div></div>
+      <button class="block ghost" onclick="newStage()">Neue leere Stage</button>
+      <button class="block ghost" onclick="exportJSON()">JSON exportieren (Download)</button>
+      <div class="status-msg" id="statusMsg"></div>
+    </div>
+  </div>
+
+  <div class="stage-wrap" id="stageWrap">
+    <div class="hud" id="hud"></div>
+    <button class="fs-btn" onclick="enterFullscreen()">⛶</button>
+    <svg id="svg"></svg>
+  </div>
+
+  <button class="exit-fs-btn ghost" id="exitFsBtn" style="display:none;" onclick="exitFullscreen()">✕ Beenden</button>
+</div>
+
+<script>
+/* ==================================================================
+   ECHTE ALPHACORE ZONEN-GEOMETRIE
+   Quelle: Alphacore_v1_06_07 / Worker/targets/zones_*.json
+   Koordinaten im Original in mm, hier 1:1 übernommen.
+================================================================== */
+const TARGET_TYPES = {
+
+  ipsc_classic: {
+    label:'IPSC Classic', kind:'poly', widthCm:21.21, heightCm:26.62,
+    parts:[{
+      outer:[[5,169.9],[5,100.1],[73.3,29.4],[141.7,29.4],[208,100.1],[208,169.9],[141.7,239.9],[73.3,239.9]],
+      zones:[
+        {name:'D', score:1, points:[[9.3,168.8],[9.3,101.2],[75.5,33.0],[139.5,33.0],[203.7,101.2],[203.7,168.8],[139.5,236.3],[75.5,236.3]]},
+        {name:'C', score:3, points:[[43.15,101.2],[75.5,33.0],[139.5,33.0],[171.6,101.2],[171.6,152.7],[128.8,191.7],[86.2,191.7],[43.15,152.7]]},
+        {name:'A', score:5, points:[[73.3,130.1],[73.3,99.2],[95.5,39.2],[117.5,39.2],[139.6,99.2],[139.6,130.1],[117.5,156.4],[95.5,156.4]]}
+      ]
+    }]
+  },
+
+  ipsc_classic_ns: {
+    label:'IPSC Classic No-Shoot', kind:'poly', widthCm:23.7, heightCm:36.0,
+    parts:[{
+      outer:[[10.2,314.7],[10.2,135.6],[82.4,44.7],[154.5,44.7],[226.7,135.6],[226.7,314.7]],
+      zones:[
+        {name:'D', score:1, points:[[14.7,220.1],[14.7,137.1],[84.6,49.2],[152.3,49.2],[222.2,137.1],[222.2,220.1],[186.2,177.2],[152.3,137.1],[84.6,137.1],[49.9,177.2]]},
+        {name:'C', score:3, points:[[84.6,49.2],[49.9,137.1],[49.9,177.2],[84.6,137.1],[152.3,137.1],[186.2,177.2],[186.2,137.1],[152.3,49.2]]},
+        {name:'A', score:5, points:[[84.6,137.1],[152.3,137.1],[129.8,61.2],[107.2,61.2]]},
+        {name:'NS', score:-10, noShoot:true, points:[[14.7,314.7],[14.7,222.1],[84.6,137.1],[152.3,137.1],[222.2,222.1],[222.2,314.7]]}
+      ]
+    }]
+  },
+
+  ipsc_mini: {
+    label:'IPSC Mini', kind:'poly', widthCm:15.84, heightCm:19.92,
+    parts:[{
+      outer:[[60.5,155.9],[24.7,118.7],[24.7,80.3],[60.5,42.1],[97.5,42.1],[133.3,80.3],[133.3,118.7],[97.5,155.9]],
+      zones:[
+        {name:'D', score:1, points:[[61.7,154.0],[27.0,118.0],[27.0,81.0],[61.7,44.0],[96.3,44.0],[131.0,81.0],[131.0,118.0],[96.3,154.0]]},
+        {name:'C', score:3, points:[[67.5,127.7],[44.3,109.2],[44.3,81.0],[61.7,44.0],[96.3,44.0],[113.7,81.0],[113.7,109.2],[90.5,127.7]]},
+        {name:'A', score:5, points:[[73.2,108.1],[61.7,97.6],[61.7,81.0],[73.2,49.0],[84.8,49.0],[96.3,81.0],[96.3,97.6],[84.8,108.1]]}
+      ]
+    }]
+  },
+
+  ipsc_mini_double: {
+    label:'IPSC Mini Double', kind:'poly', widthCm:23.7, heightCm:36.0,
+    parts:[
+      { outer:[[197.8,253.2],[145.5,319.6],[91.6,319.6],[39.2,253.2],[39.2,186.8],[91.6,120.4],[145.5,120.4],[197.8,186.8]],
+        zones:[
+          {name:'D', score:1, points:[[194.4,187.9],[194.4,252.1],[143.8,316.2],[93.2,316.2],[42.6,252.1],[42.6,187.9],[93.2,123.8],[143.8,123.8]]},
+          {name:'C', score:3, points:[[169.1,187.9],[169.1,236.9],[135.4,275.7],[101.6,275.7],[67.9,236.9],[67.9,187.9],[93.2,123.8],[143.8,123.8]]},
+          {name:'A', score:5, points:[[143.8,216.6],[143.8,187.9],[126.9,132.2],[110.1,132.2],[93.2,187.9],[93.2,216.6],[110.1,241.9],[126.9,241.9]]}
+        ]},
+      { outer:[[197.8,163.2],[197.8,96.8],[145.5,30.4],[91.6,30.4],[39.2,96.8],[39.2,163.2],[48.5,178.5],[93.2,123.8],[143.8,123.8],[185.2,178.5]],
+        zones:[
+          {name:'D', score:1, points:[[194.4,162.1],[194.4,97.9],[143.8,33.8],[93.2,33.8],[42.6,97.9],[42.6,162.1],[50.6,175.0],[93.2,123.8],[143.8,123.8],[182.4,175.0]]},
+          {name:'C', score:3, points:[[169.1,97.9],[169.1,146.9],[166.4,149.8],[143.8,123.8],[93.2,123.8],[70.5,149.8],[67.9,146.9],[67.9,97.9],[93.2,33.8],[143.8,33.8]]},
+          {name:'A', score:5, points:[[143.8,123.8],[143.8,97.9],[126.9,42.2],[110.1,42.2],[93.2,97.9],[93.2,123.8]]}
+        ]}
+    ]
+  },
+
+  ipsc_classic_half_right: {
+    label:'IPSC Classic Half (rechts)', kind:'poly', widthCm:23.7, heightCm:36.0,
+    parts:[{
+      outer:[[118.5,313.1],[154.6,313.1],[226.4,224.4],[226.4,135.6],[154.6,41.4],[118.5,41.4]],
+      zones:[
+        {name:'D', score:1, points:[[152.4,308.6],[221.3,222.9],[221.3,137.1],[152.4,45.9],[118.5,45.9],[118.5,308.6]]},
+        {name:'C', score:3, points:[[152.4,45.9],[187.3,137.1],[187.3,202.6],[141.1,254.5],[118.5,254.5],[118.5,45.9]]},
+        {name:'A', score:5, points:[[129.8,57.2],[152.4,137.1],[152.4,175.5],[129.8,209.3],[118.5,209.3],[118.5,57.2]]}
+      ]
+    }]
+  },
+
+  ipsc_classic_half_left: {
+    label:'IPSC Classic Half (links)', kind:'poly', widthCm:23.7, heightCm:36.0,
+    parts:[{
+      outer:[[118.5,313.1],[82.4,313.1],[10.6,224.4],[10.6,135.6],[82.4,41.4],[118.5,41.4]],
+      zones:[
+        {name:'D', score:1, points:[[84.6,308.6],[15.7,222.9],[15.7,137.1],[84.6,45.9],[118.5,45.9],[118.5,308.6]]},
+        {name:'C', score:3, points:[[84.6,45.9],[49.7,137.1],[49.7,202.6],[95.9,254.5],[118.5,254.5],[118.5,45.9]]},
+        {name:'A', score:5, points:[[107.2,57.2],[84.6,137.1],[84.6,175.5],[107.2,209.3],[118.5,209.3],[118.5,57.2]]}
+      ]
+    }]
+  },
+
+  uspsa: {
+    label:'USPSA Metric', kind:'poly', widthCm:29.7, heightCm:42.0,
+    parts:[{
+      outer:[[278.5,328.82],[278.5,111.82],[246.5,86.82],[190.5,86.82],[190.5,14.82],[106.5,14.82],[106.5,86.82],[50.5,86.82],[18.5,111.82],[18.5,328.82],[66.5,401.82],[230.5,401.82]],
+      zones:[
+        {name:'C', score:3, points:[[208.5,328.82],[235.5,254.82],[235.5,111.82],[190.5,86.82],[190.5,14.82],[106.5,14.82],[106.5,86.82],[61.5,111.82],[61.5,254.82],[88.5,328.82]]},
+        {name:'A', score:5, points:[[190.82,264.82],[190.5,111.82],[106.05,111.82],[106.05,264.82]]},
+        {name:'A', score:5, points:[[178.45,51.7],[178.45,29.7],[118.05,29.7],[118.05,51.7]]}
+      ]
+    }]
+  },
+
+  plate: {
+    label:'Steel Plate', kind:'ellipse', widthCm:29.7, heightCm:42.0,
+    cx:147.5, cy:209.5,
+    rings:[ {name:'Hit', score:5, rx:97.5, ry:90.5} ]
+  },
+
+  prazision: {
+    label:'Präzision (Ringscheibe)', kind:'ellipse', widthCm:29.7, heightCm:42.0,
+    cx:148.5, cy:208.5,
+    rings:[
+      {name:'1', score:1, rx:123.5, ry:116.5}, {name:'2', score:2, rx:110.3, ry:104.1},
+      {name:'3', score:3, rx:97.2,  ry:91.7 }, {name:'4', score:4, rx:84.0,  ry:79.3 },
+      {name:'5', score:5, rx:70.8,  ry:66.9 }, {name:'6', score:6, rx:57.7,  ry:54.6 },
+      {name:'7', score:7, rx:44.5,  ry:42.2 }, {name:'8', score:8, rx:31.3,  ry:29.8 },
+      {name:'9', score:9, rx:18.2,  ry:17.4 }, {name:'X', score:10,rx:5.0,   ry:5.0  }
+    ]
+  }
+};
+
+const ZONE_COLOR = { D:'#8a7550', C:'#6b7d55', A:'#c0453f' };
+const RING_PALETTE = ['#5b6b8c','#5b6b8c','#6b7d55','#6b7d55','#c9a876','#c9a876','#c0453f','#c0453f','#e8873a','#f2d24a'];
+
+let state = {
+  name:'Neue Stage', diagIn:100, screenDistM:2.5, aspect:1.777,
+  view:'editor', targets:[], selectedId:null
+};
+let nextId = 1;
+
+function addTarget(type){
+  const def = TARGET_TYPES[type];
+  const target = {
+    id: nextId++, type,
+    distanceM: type==='plate' ? 15 : (type==='prazision' ? 10 : 10),
+    lateralM: 0,
+    heightM: type==='plate' ? 0.9 : (type==='prazision' ? 1.0 : 0),
+    rotationDeg: 0,
+    scalePct: 100
+  };
+  state.targets.push(target);
+  state.selectedId = target.id;
+  render();
+}
+
+function selectTarget(id){ state.selectedId = id; render(); }
+function deleteSelected(){ state.targets = state.targets.filter(t=>t.id!==state.selectedId); state.selectedId = null; render(); }
+function getSelected(){ return state.targets.find(t=>t.id===state.selectedId); }
+
+/* ---------------- Skalierung: reale cm -> px, distanzabhängig ---------------- */
+let stageW=0, stageH=0, pxPerCm=0;
+
+function computeStageRect(){
+  const wrap = document.getElementById('stageWrap');
+  const availW = wrap.clientWidth - 20;
+  const availH = wrap.clientHeight - 20;
+  let w = availW, h = w / state.aspect;
+  if(h > availH){ h = availH; w = h * state.aspect; }
+  stageW = Math.round(w); stageH = Math.round(h);
+  const diagPx = Math.sqrt(stageW*stageW + stageH*stageH);
+  const diagCm = state.diagIn * 2.54;
+  pxPerCm = diagPx / diagCm;
+}
+function toPx(realCm, distanceM){
+  const scale = (state.screenDistM*100) / (distanceM*100);
+  return realCm * scale * pxPerCm;
+}
+
+/* ---------------- Rendering ---------------- */
+function render(){
+  computeStageRect();
+  const svg = document.getElementById('svg');
+  svg.setAttribute('width', stageW); svg.setAttribute('height', stageH);
+  svg.setAttribute('viewBox', `0 0 ${stageW} ${stageH}`);
+  svg.innerHTML = '';
+
+  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  defs.innerHTML = `<pattern id="nsHatch" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+    <rect width="8" height="8" fill="#111"/><rect width="4" height="8" fill="#eee"/></pattern>`;
+  svg.appendChild(defs);
+
+  const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
+  bg.setAttribute('width', stageW); bg.setAttribute('height', stageH); bg.setAttribute('fill', '#4b4e52');
+  svg.appendChild(bg);
+
+  if(state.view==='editor'){
+    const grid = document.createElementNS('http://www.w3.org/2000/svg','g');
+    grid.setAttribute('stroke', 'rgba(255,255,255,0.08)'); grid.setAttribute('stroke-width','1');
+    for(let x=0;x<=10;x++){
+      const px = x/10*stageW;
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',px); line.setAttribute('y1',0); line.setAttribute('x2',px); line.setAttribute('y2',stageH);
+      grid.appendChild(line);
+    }
+    const ground = document.createElementNS('http://www.w3.org/2000/svg','line');
+    ground.setAttribute('x1',0); ground.setAttribute('y1',stageH-2); ground.setAttribute('x2',stageW); ground.setAttribute('y2',stageH-2);
+    ground.setAttribute('stroke', 'var(--accent)'); ground.setAttribute('stroke-width','2');
+    grid.appendChild(ground);
+    svg.appendChild(grid);
+  }
+
+  const sorted = [...state.targets].sort((a,b)=>b.distanceM-a.distanceM);
+  sorted.forEach(t => drawTarget(svg, t));
+
+  renderSidebarLists(); renderEditor(); renderHud();
+}
+
+function drawTarget(svg, t){
+  const def = TARGET_TYPES[t.type];
+  const widthCm = def.widthCm * t.scalePct/100;
+  const heightCm = def.heightCm * t.scalePct/100;
+  const foreshorten = Math.max(0.12, Math.abs(Math.cos(t.rotationDeg*Math.PI/180)));
+  const wPx = toPx(widthCm, t.distanceM) * foreshorten;
+  const hPx = toPx(heightCm, t.distanceM);
+
+  const cx = stageW/2 + toPx(t.lateralM*100, t.distanceM);
+  const bottomY = stageH - toPx(t.heightM*100, t.distanceM);
+  const topY = bottomY - hPx;
+  const leftX = cx - wPx/2;
+
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.setAttribute('class','target-hit'); g.setAttribute('data-id', t.id);
+  const inner = document.createElementNS('http://www.w3.org/2000/svg','g');
+  // Lokales Koordinatensystem ist 0-100 x 0-100 (normalisiert aus den echten mm-Werten unten)
+  inner.setAttribute('transform', `translate(${leftX},${topY}) scale(${wPx/100},${hPx/100})`);
+
+  const isEditor = state.view==='editor';
+
+  if(def.kind==='poly'){
+    def.parts.forEach(part=>{
+      const W = def._W, H = def._H; // set at init
+      const outerNorm = part.outer.map(p=>[p[0]/W*100, p[1]/H*100]);
+      const outerShape = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+      outerShape.setAttribute('points', outerNorm.map(p=>`${p[0]},${p[1]}`).join(' '));
+      outerShape.setAttribute('vector-effect','non-scaling-stroke');
+      outerShape.setAttribute('fill', isEditor ? '#3a3d42' : 'var(--cardboard)');
+      outerShape.setAttribute('stroke', isEditor ? 'rgba(255,255,255,.15)' : 'var(--zone-line)');
+      outerShape.setAttribute('stroke-width','1');
+      inner.appendChild(outerShape);
+
+      part.zones.forEach(z=>{
+        const norm = z.points.map(p=>[p[0]/W*100, p[1]/H*100]);
+        const shape = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+        shape.setAttribute('points', norm.map(p=>`${p[0]},${p[1]}`).join(' '));
+        shape.setAttribute('vector-effect','non-scaling-stroke');
+        if(z.noShoot){
+          shape.setAttribute('fill', isEditor ? 'url(#nsHatch)' : 'url(#nsHatch)');
+          shape.setAttribute('stroke', '#000'); shape.setAttribute('stroke-width','1.2');
+        } else if(isEditor){
+          shape.setAttribute('fill', ZONE_COLOR[z.name] || '#999');
+          shape.setAttribute('fill-opacity','0.85');
+          shape.setAttribute('stroke','rgba(0,0,0,.5)'); shape.setAttribute('stroke-width','1');
+        } else {
+          shape.setAttribute('fill','none');
+          shape.setAttribute('stroke','var(--zone-line)');
+          shape.setAttribute('stroke-width', z.name==='A' ? '1.4':'1');
+        }
+        inner.appendChild(shape);
+      });
+    });
+  } else if(def.kind==='ellipse'){
+    const cxN = def.cx/def._W*100, cyN = def.cy/def._H*100;
+    const ringsDesc = [...def.rings].slice().reverse(); // größter Ring zuerst (unten), kleinster zuletzt (oben)
+    ringsDesc.forEach((r,i)=>{
+      const el = document.createElementNS('http://www.w3.org/2000/svg','ellipse');
+      el.setAttribute('cx', cxN); el.setAttribute('cy', cyN);
+      el.setAttribute('rx', r.rx/def._W*100); el.setAttribute('ry', r.ry/def._H*100);
+      el.setAttribute('vector-effect','non-scaling-stroke');
+      if(t.type==='plate'){
+        el.setAttribute('fill', isEditor ? '#9aa0a6' : '#9aa0a6');
+        el.setAttribute('stroke', '#4a4d52'); el.setAttribute('stroke-width','1.5');
+      } else {
+        const idx = def.rings.length-1-i;
+        el.setAttribute('fill', isEditor ? RING_PALETTE[idx % RING_PALETTE.length] : (idx%2===0 ? '#c9a876':'#efe6d3'));
+        el.setAttribute('stroke', 'var(--zone-line)'); el.setAttribute('stroke-width','0.8');
+      }
+      inner.appendChild(el);
+    });
+  }
+
+  g.appendChild(inner);
+
+  if(t.id===state.selectedId && isEditor){
+    const outline = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    outline.setAttribute('x', leftX-4); outline.setAttribute('y', topY-4);
+    outline.setAttribute('width', wPx+8); outline.setAttribute('height', hPx+8);
+    outline.setAttribute('class','target-selected-outline');
+    g.appendChild(outline);
+  }
+  if(isEditor){
+    const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+    label.setAttribute('x', leftX); label.setAttribute('y', topY-8);
+    label.setAttribute('fill', '#cfd3d8'); label.setAttribute('font-size','11'); label.setAttribute('font-family','JetBrains Mono, monospace');
+    label.textContent = `${def.label} · ${t.distanceM.toFixed(1)}m`;
+    g.appendChild(label);
+  }
+  g.addEventListener('pointerdown', (e)=>startDrag(e,t));
+  svg.appendChild(g);
+}
+
+// Bind bounding-box W/H for each type once (poly types use their own recorded box; ellipse types use widthCm*10/heightCm*10 mm)
+Object.keys(TARGET_TYPES).forEach(k=>{
+  const def = TARGET_TYPES[k];
+  def._W = def.widthCm*10; def._H = def.heightCm*10;
+});
+
+/* ---------------- Drag & Drop ---------------- */
+let dragState = null;
+function startDrag(e, target){
+  e.preventDefault();
+  state.selectedId = target.id;
+  dragState = { target, startX:e.clientX, startY:e.clientY, startLateralM:target.lateralM, startHeightM:target.heightM };
+  window.addEventListener('pointermove', onDrag);
+  window.addEventListener('pointerup', endDrag);
+  render();
+}
+function onDrag(e){
+  if(!dragState) return;
+  const t = dragState.target;
+  const dxPx = e.clientX - dragState.startX, dyPx = e.clientY - dragState.startY;
+  const scale = (state.screenDistM*100) / (t.distanceM*100);
+  const dLateralCm = (dxPx / pxPerCm) / scale;
+  const dHeightCm = (-dyPx / pxPerCm) / scale;
+  t.lateralM = dragState.startLateralM + dLateralCm/100;
+  t.heightM = Math.max(0, dragState.startHeightM + dHeightCm/100);
+  render();
+}
+function endDrag(){ dragState=null; window.removeEventListener('pointermove', onDrag); window.removeEventListener('pointerup', endDrag); }
+
+/* ---------------- Sidebar: Listen & Editor ---------------- */
+function renderSidebarLists(){
+  const list = document.getElementById('targetList');
+  if(state.targets.length===0){ list.innerHTML = '<div class="empty-hint">Noch keine Targets — oben hinzufügen.</div>'; return; }
+  list.innerHTML='';
+  state.targets.forEach(t=>{
+    const def = TARGET_TYPES[t.type];
+    const div = document.createElement('div');
+    div.className = 'target-item' + (t.id===state.selectedId ? ' active':'');
+    div.innerHTML = `<span>${def.label} #${t.id}</span><span class="tag">${t.distanceM.toFixed(1)}m</span>`;
+    div.onclick = ()=>selectTarget(t.id);
+    list.appendChild(div);
+  });
+}
+function renderEditor(){
+  const sec = document.getElementById('editorSection');
+  const t = getSelected();
+  if(!t){ sec.style.display='none'; return; }
+  sec.style.display='block';
+  const def = TARGET_TYPES[t.type];
+  document.getElementById('edType').value = def.label;
+  document.getElementById('edDist').value = t.distanceM;
+  document.getElementById('edLateral').value = t.lateralM;
+  document.getElementById('edHeight').value = t.heightM;
+  document.getElementById('edRot').value = t.rotationDeg;
+  document.getElementById('rotVal').textContent = t.rotationDeg + '°';
+  document.getElementById('edScale').value = t.scalePct;
+  document.getElementById('scaleVal').textContent = t.scalePct + '%';
+  const wCm=(def.widthCm*t.scalePct/100).toFixed(1), hCm=(def.heightCm*t.scalePct/100).toFixed(1);
+  document.getElementById('scaleHint').textContent = `Basis: ${def.widthCm}×${def.heightCm}cm (AlphaCore) → aktuell ${wCm}×${hCm}cm`;
+}
+['edDist','edLateral','edHeight'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', (e)=>{
+    const t=getSelected(); if(!t) return;
+    const map={edDist:'distanceM', edLateral:'lateralM', edHeight:'heightM'};
+    t[map[id]] = parseFloat(e.target.value)||0; render();
+  });
+});
+document.getElementById('edRot').addEventListener('input', e=>{ const t=getSelected(); if(!t)return; t.rotationDeg=parseFloat(e.target.value)||0; render(); });
+document.getElementById('edScale').addEventListener('input', e=>{ const t=getSelected(); if(!t)return; t.scalePct=parseFloat(e.target.value)||100; render(); });
+document.getElementById('stageName').addEventListener('input', e=> state.name = e.target.value);
+document.getElementById('diagIn').addEventListener('input', e=>{ state.diagIn=parseFloat(e.target.value)||100; render(); });
+document.getElementById('screenDist').addEventListener('input', e=>{ state.screenDistM=parseFloat(e.target.value)||2.5; render(); });
+document.getElementById('aspect').addEventListener('change', e=>{ state.aspect=parseFloat(e.target.value); render(); });
+
+function renderHud(){
+  document.getElementById('hud').innerHTML =
+    `<b>${state.name}</b><br>Ø ${state.diagIn}" · Abstand ${state.screenDistM}m · ${stageW}×${stageH}px<br>${state.targets.length} Target(s)`;
+}
+function toggleView(){
+  state.view = state.view==='editor' ? 'live' : 'editor';
+  document.getElementById('viewToggleBtn').textContent = 'Ansicht: ' + (state.view==='editor'?'Editor':'Live');
+  render();
+}
+
+/* ---------------- Fullscreen / Präsentation ---------------- */
+function enterFullscreen(){
+  document.getElementById('sidebar').classList.add('hidden');
+  document.getElementById('hud').style.display='none';
+  document.querySelector('.fs-btn').style.display='none';
+  document.getElementById('exitFsBtn').style.display='block';
+  state.view='live';
+  const el = document.documentElement;
+  if(el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+  setTimeout(render,50);
+}
+function exitFullscreen(){
+  document.getElementById('sidebar').classList.remove('hidden');
+  document.getElementById('hud').style.display='block';
+  document.querySelector('.fs-btn').style.display='block';
+  document.getElementById('exitFsBtn').style.display='none';
+  if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+  setTimeout(render,50);
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') exitFullscreen(); });
+
+/* ---------------- JSON Export ---------------- */
+function buildExport(){
+  return {
+    stage:{ name:state.name, screenDiagonalInch:state.diagIn, screenDistanceM:state.screenDistM, aspectRatio:state.aspect },
+    targets: state.targets.map(t=>{
+      const def = TARGET_TYPES[t.type];
+      const widthCm = def.widthCm*t.scalePct/100, heightCm = def.heightCm*t.scalePct/100;
+      const base = { id:t.id, type:t.type, distanceM:t.distanceM, lateralM:t.lateralM, heightM:t.heightM,
+        rotationDeg:t.rotationDeg, scalePct:t.scalePct, widthCm, heightCm };
+      if(def.kind==='poly'){
+        base.parts = def.parts.map(part=>({
+          outerNormalized: part.outer.map(p=>[p[0]/def._W, p[1]/def._H]),
+          zones: part.zones.map(z=>({ name:z.name, score:z.score, noShoot:!!z.noShoot,
+            pointsNormalized: z.points.map(p=>[p[0]/def._W, p[1]/def._H]) }))
+        }));
+      } else {
+        base.centerNormalized = [def.cx/def._W, def.cy/def._H];
+        base.rings = def.rings.map(r=>({ name:r.name, score:r.score, rxNormalized:r.rx/def._W, ryNormalized:r.ry/def._H }));
+      }
+      return base;
+    })
+  };
+}
+function exportJSON(){
+  const data = JSON.stringify(buildExport(), null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=(state.name||'stage').replace(/[^a-z0-9_\-]+/gi,'_')+'.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------------- Persistenz (window.storage) ---------------- */
+function setStatus(msg, isErr){
+  const el = document.getElementById('statusMsg'); el.textContent=msg; el.className='status-msg'+(isErr?' err':'');
+  setTimeout(()=>{ el.textContent=''; }, 3000);
+}
+async function saveStage(){
+  try{
+    const key = 'stage:' + state.name;
+    const payload = { ...buildExport(), targetsRaw: state.targets, view: state.view };
+    const res = await window.storage.set(key, JSON.stringify(payload), false);
+    if(!res) throw new Error('kein Ergebnis');
+    setStatus('Gespeichert: ' + state.name); refreshStageList();
+  }catch(err){ setStatus('Speichern fehlgeschlagen', true); console.error(err); }
+}
+async function refreshStageList(){
+  const listEl = document.getElementById('stageList');
+  try{
+    const res = await window.storage.list('stage:', false);
+    const keys = (res && res.keys) || [];
+    if(keys.length===0){ listEl.innerHTML = '<div class="empty-hint">Keine gespeicherten Stages.</div>'; return; }
+    listEl.innerHTML='';
+    keys.forEach(k=>{
+      const name = k.replace(/^stage:/, '');
+      const row = document.createElement('div'); row.className='stage-list-item';
+      row.innerHTML = `<span>${name}</span>`;
+      row.querySelector('span').onclick = ()=>loadStage(k);
+      listEl.appendChild(row);
+    });
+  }catch(err){ listEl.innerHTML = '<div class="empty-hint">Liste nicht verfügbar.</div>'; }
+}
+async function loadStage(key){
+  try{
+    const res = await window.storage.get(key, false);
+    if(!res) throw new Error('nicht gefunden');
+    const payload = JSON.parse(res.value);
+    state.name = payload.stage.name; state.diagIn = payload.stage.screenDiagonalInch;
+    state.screenDistM = payload.stage.screenDistanceM; state.aspect = payload.stage.aspectRatio;
+    state.targets = payload.targetsRaw || []; state.selectedId = null;
+    nextId = Math.max(1, ...state.targets.map(t=>t.id+1), 1);
+    document.getElementById('stageName').value = state.name;
+    document.getElementById('diagIn').value = state.diagIn;
+    document.getElementById('screenDist').value = state.screenDistM;
+    document.getElementById('aspect').value = state.aspect;
+    setStatus('Geladen: ' + state.name); render();
+  }catch(err){ setStatus('Laden fehlgeschlagen', true); console.error(err); }
+}
+function newStage(){
+  state = { name:'Neue Stage', diagIn:100, screenDistM:2.5, aspect:1.777, view:'editor', targets:[], selectedId:null };
+  document.getElementById('stageName').value = state.name;
+  document.getElementById('diagIn').value = state.diagIn;
+  document.getElementById('screenDist').value = state.screenDistM;
+  document.getElementById('aspect').value = state.aspect;
+  render();
+}
+
+/* ---------------- Init ---------------- */
+window.addEventListener('resize', render);
+render();
+refreshStageList();
+</script>
+</body>
+</html>
