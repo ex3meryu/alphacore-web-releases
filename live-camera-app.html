@@ -86,16 +86,16 @@
       <button class="action" id="camBtn" onclick="toggleCamera()">Kamera starten</button>
       <div class="hint" id="camHint"></div>
 
-      <h2>2. Kalibrierung</h2>
-      <button class="ghost" onclick="recalibrate()">Neu kalibrieren</button>
-      <div class="hint">Alle 4 ArUco-Marker (ID 0-3) müssen im Bild sichtbar sein — Muster über die Stage-App / Präsentationsmodus anzeigen.</div>
-
-      <h2>3. Stage laden (optional)</h2>
+      <h2>2. Stage laden (empfohlen)</h2>
       <div class="file-drop" id="dropStage" onclick="document.getElementById('fileStage').click()">
         📁 Stage-JSON auswählen<br><span style="opacity:.7">(Export aus dem Stage-Builder)</span>
       </div>
       <input type="file" id="fileStage" accept="application/json,.json">
-      <div class="hint" id="stageHint">Ohne Stage: Es wird nur die rohe Bildschirm-Koordinate des Laserpunkts angezeigt, keine Zonen-Zuordnung.</div>
+      <div class="hint" id="stageHint">Enthält jetzt auch die exakte Marker-Position (aus computeCalibFractions) — Stage vor dem Kalibrieren laden, sonst wird (0,0)-(1,1) angenommen (nur korrekt beim eigenständigen screen-calibration.html-Muster).</div>
+
+      <h2>3. Kalibrierung</h2>
+      <button class="ghost" onclick="recalibrate()">Neu kalibrieren</button>
+      <div class="hint">Alle 4 ArUco-Marker (ID 0-3) müssen im Bild sichtbar sein — Stage-Präsentation (mit eingebauten Markern) oder screen-calibration.html-Muster anzeigen.</div>
 
       <h2>4. Laser</h2>
       <div class="toggle-group">
@@ -1250,7 +1250,11 @@ function tryCalibrate(){
   document.getElementById('calibBox').innerHTML = `Kalibrierung: <b>${foundCount}/4 Marker</b>`;
 
   if(foundCount===4){
-    const srcPts = [[0,0],[1,0],[1,1],[0,1]];
+    // Falls eine Stage geladen ist, kennen wir die EXAKTE Bildschirm-Position der Marker
+    // (aus computeCalibFractions() im Stage-Builder). Ohne Stage: Fallback auf (0,0)-(1,1),
+    // z.B. beim Testen mit dem eigenständigen screen-calibration.html-Muster.
+    const cm = (stageData && stageData.calibrationMarkers) || { tl:[0,0], tr:[1,0], br:[1,1], bl:[0,1] };
+    const srcPts = [cm.tl, cm.tr, cm.br, cm.bl];
     const dstPts = [ [found.tl.x,found.tl.y], [found.tr.x,found.tr.y], [found.br.x,found.br.y], [found.bl.x,found.bl.y] ];
     H_screenToImage = computeHomographyFromPoints(srcPts, dstPts);
     H_imageToScreen = invert3x3(H_screenToImage);
@@ -1370,6 +1374,7 @@ document.getElementById('fileStage').addEventListener('change', e=>{
       document.getElementById('dropStage').classList.add('loaded');
       document.getElementById('dropStage').innerHTML = `✓ ${stageData.stage.name} (${stageData.targets.length} Targets)`;
       document.getElementById('stageHint').textContent = 'Stage geladen — Treffer werden jetzt Zonen zugeordnet.';
+      recalibrate(); // Marker-Referenzpunkte können sich mit der Stage geändert haben
     }catch(err){
       alert('Konnte Stage-JSON nicht lesen: ' + err.message);
     }
