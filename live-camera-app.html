@@ -97,17 +97,37 @@
       <button class="ghost" onclick="recalibrate()">Neu kalibrieren</button>
       <div class="hint">Alle 4 ArUco-Marker (ID 0-3) müssen im Bild sichtbar sein — Stage-Präsentation (mit eingebauten Markern) oder screen-calibration.html-Muster anzeigen.</div>
 
-      <h2>4. Laser</h2>
+      <h2>4. Laser-Erkennung</h2>
       <div class="toggle-group">
         <button id="btnRed" class="active" onclick="setColor('red')">🔴 Rot</button>
         <button id="btnGreen" onclick="setColor('green')">🟢 Grün</button>
       </div>
-      <label class="field">Helligkeits-Schwelle: <span id="brightVal">200</span></label>
-      <input type="range" id="brightThresh" min="120" max="254" step="2" value="200">
-      <label class="field">Farbdominanz-Schwelle: <span id="domVal">35</span></label>
-      <input type="range" id="domThresh" min="5" max="120" step="5" value="35">
+      <div class="toggle-group">
+        <button id="btnAuto" class="active" onclick="setExposureSoftMode('auto')">Auto</button>
+        <button id="btnManual" onclick="setExposureSoftMode('manual')">Manuell</button>
+      </div>
+      <div id="autoStatus" class="readout" style="margin-bottom:10px;">Automatische Kalibrierung läuft…</div>
+      <div id="manualControls" style="display:none;">
+        <label class="field">Helligkeits-Schwelle: <span id="brightVal">200</span></label>
+        <input type="range" id="brightThresh" min="120" max="254" step="2" value="200">
+        <label class="field">Farbdominanz-Schwelle: <span id="domVal">35</span></label>
+        <input type="range" id="domThresh" min="5" max="120" step="5" value="35">
+      </div>
 
-      <h2>5. Treffer-Log</h2>
+      <h2>5. Hardware-Belichtung (Kamera)</h2>
+      <div id="hwExposureBox" class="hint">Noch nicht geprüft — erscheint nach Kamera-Start.</div>
+      <div id="hwExposureControls" style="display:none;">
+        <div class="toggle-group">
+          <button id="btnHwAuto" class="active" onclick="setHwExposureMode('continuous')">Auto</button>
+          <button id="btnHwManual" onclick="setHwExposureMode('manual')">Manuell</button>
+        </div>
+        <div id="hwManualSlider" style="display:none;">
+          <label class="field">Belichtungskorrektur: <span id="hwExpVal">0</span></label>
+          <input type="range" id="hwExpRange" min="-1" max="1" step="0.05" value="0">
+        </div>
+      </div>
+
+      <h2>6. Treffer-Log</h2>
       <button class="ghost" onclick="clearLog()">Log leeren</button>
       <div class="log" id="log"></div>
     </div>
@@ -1149,6 +1169,10 @@ const PROC_W_CALIB = 1280; // Höhere Auflösung nur während der Kalibrierungss
 let calibrated = false;
 let H_screenToImage = null, H_imageToScreen = null;
 let laserColor = 'red';
+let exposureSoftMode = 'auto'; // 'auto' | 'manual'
+let autoBright = 200, autoDom = 35; // laufend per Perzentil-Schätzung aktualisiert
+let autoCalibratedOnce = false;
+let lastAutoCalibTime = 0;
 let lastLaserPresent = false;
 let stageData = null; // geparstes Stage-JSON (siehe buildExport() im Stage-Builder)
 let screenWcm = null, screenHcm = null;
@@ -1160,6 +1184,15 @@ function setColor(c){
   laserColor = c;
   document.getElementById('btnRed').classList.toggle('active', c==='red');
   document.getElementById('btnGreen').classList.toggle('active', c==='green');
+  autoCalibratedOnce = false; // Farbwechsel -> Auto-Werte neu einpendeln lassen
+}
+function setExposureSoftMode(mode){
+  exposureSoftMode = mode;
+  document.getElementById('btnAuto').classList.toggle('active', mode==='auto');
+  document.getElementById('btnManual').classList.toggle('active', mode==='manual');
+  document.getElementById('autoStatus').style.display = mode==='auto' ? 'block' : 'none';
+  document.getElementById('manualControls').style.display = mode==='manual' ? 'block' : 'none';
+  if(mode==='auto') autoCalibratedOnce = false;
 }
 
 /* ---------------- Kamera Start/Stop ---------------- */
@@ -1176,10 +1209,52 @@ async function toggleCamera(){
     document.getElementById('camHint').textContent = '';
     running = true;
     requestAnimationFrame(loop);
+    setupHardwareExposure();
   }catch(err){
     document.getElementById('camHint').innerHTML = `<span style="color:var(--danger)">Kamera-Fehler: ${err.message}</span>`;
   }
 }
+
+/* ---------------- Hardware-Belichtung (wo vom Browser/Gerät unterstützt) ----------------
+   MediaTrackCapabilities für exposureMode/exposureCompensation sind Teil der "Image Capture API"-
+   Erweiterung. Support ist uneinheitlich: einige Android-Chrome-Geräte bieten exposureCompensation,
+   iOS Safari bietet praktisch keine dieser Controls. Daher immer per Feature-Detection prüfen und
+   sauber ausblenden statt einen Fehler zu riskieren.
+------------------------------------------------------------------------------------------------- */
+let videoTrack = null;
+function setupHardwareExposure(){
+  videoTrack = stream.getVideoTracks()[0];
+  const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+  const box = document.getElementById('hwExposureBox');
+  const controls = document.getElementById('hwExposureControls');
+
+  if(caps.exposureCompensation && caps.exposureMode){
+    box.innerHTML = `<span style="color:var(--safe)">✓ Unterstützt</span> (exposureCompensation ${caps.exposureCompensation.min} bis ${caps.exposureCompensation.max})`;
+    controls.style.display = 'block';
+    const range = document.getElementById('hwExpRange');
+    range.min = caps.exposureCompensation.min; range.max = caps.exposureCompensation.max;
+    range.step = caps.exposureCompensation.step || 0.05;
+    range.value = 0;
+  } else {
+    box.innerHTML = 'Auf diesem Gerät/Browser nicht verfügbar (üblich bei iPhone/Safari sowie vielen Android-Browsern). Software-Kalibrierung oben übernimmt die Aufgabe stattdessen.';
+    controls.style.display = 'none';
+  }
+}
+
+function setHwExposureMode(mode){
+  document.getElementById('btnHwAuto').classList.toggle('active', mode==='continuous');
+  document.getElementById('btnHwManual').classList.toggle('active', mode==='manual');
+  document.getElementById('hwManualSlider').style.display = mode==='manual' ? 'block' : 'none';
+  if(!videoTrack) return;
+  videoTrack.applyConstraints({ advanced:[{ exposureMode: mode }] }).catch(err=>{
+    document.getElementById('hwExposureBox').innerHTML = `<span style="color:var(--danger)">Konnte Modus nicht setzen: ${err.message}</span>`;
+  });
+}
+document.getElementById('hwExpRange').addEventListener('input', e=>{
+  document.getElementById('hwExpVal').textContent = e.target.value;
+  if(!videoTrack) return;
+  videoTrack.applyConstraints({ advanced:[{ exposureCompensation: parseFloat(e.target.value) }] }).catch(()=>{});
+});
 function stopCamera(){
   running = false;
   if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
@@ -1321,13 +1396,53 @@ function findLargestComponent(mask, gridW, gridH){
   return { cells:bestCells, size:bestSize };
 }
 
+function percentileFromHist(hist, total, pct){
+  const targetCount = total*pct;
+  let cum = 0;
+  for(let v=0; v<256; v++){ cum += hist[v]; if(cum>=targetCount) return v; }
+  return 255;
+}
+
+function autoCalibrateExposure(data, w, h){
+  // Einmaliger Durchgang: Histogramm von Ziel-Kanal und Farbdominanz aufbauen (kein Sortieren nötig)
+  const brightHist = new Uint32Array(256), domHist = new Uint32Array(256);
+  const n = w*h;
+  for(let i=0;i<n;i++){
+    const px=i*4;
+    const r=data[px], g=data[px+1], b=data[px+2];
+    const target = laserColor==='red' ? r : g;
+    const others = laserColor==='red' ? Math.max(g,b) : Math.max(r,b);
+    brightHist[target]++;
+    domHist[Math.max(0, Math.min(255, target-others))]++;
+  }
+  // 99.9%/99.5%-Perzentil = die hellsten/farblich dominantesten Ausreißer im Bild (typischerweise der Laser)
+  const brightP = percentileFromHist(brightHist, n, 0.999);
+  const domP = percentileFromHist(domHist, n, 0.995);
+  autoBright = Math.max(150, Math.min(250, brightP - 4));
+  autoDom = Math.max(15, Math.min(100, domP - 3));
+  autoCalibratedOnce = true;
+  const statusEl = document.getElementById('autoStatus');
+  statusEl.textContent = `Automatisch: Helligkeit ${autoBright.toFixed(0)} · Dominanz ${autoDom.toFixed(0)} (live aktualisiert)`;
+}
+
 function runLaserFrame(){
   const w=procCanvas.width, h=procCanvas.height;
   const data = pctx.getImageData(0,0,w,h).data;
-  const brightThresh = parseFloat(document.getElementById('brightThresh').value);
-  const domThresh = parseFloat(document.getElementById('domThresh').value);
-  const mask = new Uint8Array(w*h);
 
+  let brightThresh, domThresh;
+  if(exposureSoftMode==='auto'){
+    const now = performance.now();
+    if(!autoCalibratedOnce || now-lastAutoCalibTime>600){ // ca. alle 600ms neu schätzen, spart CPU
+      autoCalibrateExposure(data, w, h);
+      lastAutoCalibTime = now;
+    }
+    brightThresh = autoBright; domThresh = autoDom;
+  } else {
+    brightThresh = parseFloat(document.getElementById('brightThresh').value);
+    domThresh = parseFloat(document.getElementById('domThresh').value);
+  }
+
+  const mask = new Uint8Array(w*h);
   for(let i=0;i<w*h;i++){
     const px=i*4;
     const r=data[px], g=data[px+1], b=data[px+2];
