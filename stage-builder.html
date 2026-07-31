@@ -65,10 +65,12 @@
   .hint{font-size:10.5px; color:var(--muted); line-height:1.5; margin:-4px 0 10px;}
 
   .stage-wrap{flex:1; position:relative; display:flex; align-items:center; justify-content:center; background: radial-gradient(ellipse at 50% 0%, #23272d 0%, #101215 70%);}
-  .hud{position:absolute; top:14px; left:14px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); background:rgba(20,22,26,.6); border:1px solid var(--border); padding:8px 10px; border-radius:3px; line-height:1.6; pointer-events:none; z-index:5;}
+  .stage-frame{position:relative;}
+  .toggle-row{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+  .hud{position:absolute; top:14px; left:50%; transform:translateX(-50%); font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); background:rgba(20,22,26,.6); border:1px solid var(--border); padding:8px 10px; border-radius:3px; line-height:1.6; pointer-events:none; z-index:5; text-align:center;}
   .hud b{color:var(--accent);}
-  .fs-btn{position:absolute; top:14px; right:14px; z-index:5;}
-  .exit-fs-btn{position:fixed; top:16px; right:16px; z-index:50; opacity:.35;}
+  .fs-btn{position:absolute; top:50%; right:14px; transform:translateY(-50%); z-index:5;}
+  .exit-fs-btn{position:fixed; top:50%; right:16px; transform:translateY(-50%); z-index:50; opacity:.35;}
   .exit-fs-btn:hover{opacity:1;}
   svg{display:block;}
   .target-hit{cursor:grab;} .target-hit:active{cursor:grabbing;}
@@ -142,6 +144,10 @@
       <h2>Stage</h2>
       <button class="block ghost" onclick="toggleView()" id="viewToggleBtn">Ansicht: Editor</button>
       <button class="block primary" onclick="enterFullscreen()">▶ Präsentation (Beamer)</button>
+      <div class="toggle-row">
+        <input type="checkbox" id="showMarkers" checked onchange="toggleMarkers()">
+        <label for="showMarkers" style="margin:0; font-family:'Inter',sans-serif; font-size:12.5px; color:var(--text);">ArUco-Kalibrierungsmarker anzeigen</label>
+      </div>
     </div>
 
     <div class="section">
@@ -157,7 +163,9 @@
   <div class="stage-wrap" id="stageWrap">
     <div class="hud" id="hud"></div>
     <button class="fs-btn" onclick="enterFullscreen()">⛶</button>
-    <svg id="svg"></svg>
+    <div class="stage-frame" id="stageFrame">
+      <svg id="svg"></svg>
+    </div>
   </div>
 
   <button class="exit-fs-btn ghost" id="exitFsBtn" style="display:none;" onclick="exitFullscreen()">✕ Beenden</button>
@@ -286,7 +294,7 @@ const RING_PALETTE = ['#5b6b8c','#5b6b8c','#6b7d55','#6b7d55','#c9a876','#c9a876
 
 let state = {
   name:'Neue Stage', diagIn:100, screenDistM:2.5, aspect:1.777,
-  view:'editor', targets:[], selectedId:null
+  view:'editor', targets:[], selectedId:null, showMarkers:true
 };
 let nextId = 1;
 
@@ -331,6 +339,8 @@ function toPx(realCm, distanceM){
 /* ---------------- Rendering ---------------- */
 function render(){
   computeStageRect();
+  const stageFrame = document.getElementById('stageFrame');
+  stageFrame.style.width = stageW+'px'; stageFrame.style.height = stageH+'px';
   const svg = document.getElementById('svg');
   svg.setAttribute('width', stageW); svg.setAttribute('height', stageH);
   svg.setAttribute('viewBox', `0 0 ${stageW} ${stageH}`);
@@ -364,7 +374,75 @@ function render(){
   const sorted = [...state.targets].sort((a,b)=>b.distanceM-a.distanceM);
   sorted.forEach(t => drawTarget(svg, t));
 
+  if(state.showMarkers) drawCalibrationMarkers(svg);
+
   renderSidebarLists(); renderEditor(); renderHud();
+}
+
+/* ---------------- ArUco-Kalibriermarker (immer in den 4 Ecken sichtbar) ----------------
+   Bit-Kodierung identisch zur Kamera-App / js-aruco-Bibliothek (Marker-IDs 0-3 = TL,TR,BR,BL).
+   Position/Größe relativ zur kleineren Stage-Dimension, damit die exakten Bildschirm-Anteile
+   unabhängig vom Seitenverhältnis reproduzierbar sind -> werden 1:1 mit ins JSON exportiert,
+   die Kamera-App muss die Randbreite dann nicht mehr raten (0,0)-(1,1) annehmen.
+------------------------------------------------------------------------------------------- */
+const CALIB_MARGIN_FRAC = 0.02;   // Abstand vom Stage-Rand
+const CALIB_MARKER_FRAC = 0.10;   // Markergröße (inkl. weißer Ruhezone)
+const ARUCO_ROW_TABLE = [[1,0,0,0,0],[1,0,1,1,1],[0,1,0,0,1],[0,1,1,1,0]];
+const CALIB_CORNER_ID = { tl:0, tr:1, br:2, bl:3 };
+
+function idToRows(id){
+  let tmp = id; const rows = [];
+  for(let i=4;i>=0;i--){ const c3=tmp&1; tmp>>=1; const c1=tmp&1; tmp>>=1; rows[i]=ARUCO_ROW_TABLE[(c1<<1)|c3]; }
+  return rows;
+}
+
+function computeCalibFractions(){
+  const minDim = Math.min(stageW, stageH);
+  const marginPx = CALIB_MARGIN_FRAC*minDim, sizePx = CALIB_MARKER_FRAC*minDim;
+  const cxLeft = (marginPx+sizePx/2)/stageW, cxRight = 1-cxLeft;
+  const cyTop = (marginPx+sizePx/2)/stageH, cyBottom = 1-cyTop;
+  return {
+    tl:[cxLeft,cyTop], tr:[cxRight,cyTop], br:[cxRight,cyBottom], bl:[cxLeft,cyBottom]
+  };
+}
+
+function drawCalibrationMarkers(svg){
+  const minDim = Math.min(stageW, stageH);
+  const marginPx = CALIB_MARGIN_FRAC*minDim, sizePx = CALIB_MARKER_FRAC*minDim;
+  const positions = {
+    tl:[marginPx, marginPx],
+    tr:[stageW-marginPx-sizePx, marginPx],
+    br:[stageW-marginPx-sizePx, stageH-marginPx-sizePx],
+    bl:[marginPx, stageH-marginPx-sizePx]
+  };
+  Object.keys(positions).forEach(key=>{
+    const [x,y] = positions[key];
+    const id = CALIB_CORNER_ID[key];
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    const bgRect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    bgRect.setAttribute('x',x); bgRect.setAttribute('y',y);
+    bgRect.setAttribute('width',sizePx); bgRect.setAttribute('height',sizePx);
+    bgRect.setAttribute('fill','#fff');
+    g.appendChild(bgRect);
+
+    const GRID = 9, cell = sizePx/GRID;
+    const rows = idToRows(id);
+    for(let i=0;i<7;i++){
+      for(let j=0;j<7;j++){
+        let black;
+        if(i===0||i===6||j===0||j===6) black = true;
+        else black = rows[i-1][j-1] === 0;
+        if(black){
+          const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+          r.setAttribute('x', x+(j+1)*cell); r.setAttribute('y', y+(i+1)*cell);
+          r.setAttribute('width', cell+0.5); r.setAttribute('height', cell+0.5);
+          r.setAttribute('fill', '#000');
+          g.appendChild(r);
+        }
+      }
+    }
+    svg.appendChild(g);
+  });
 }
 
 function drawTarget(svg, t){
@@ -543,6 +621,10 @@ function toggleView(){
   document.getElementById('viewToggleBtn').textContent = 'Ansicht: ' + (state.view==='editor'?'Editor':'Live');
   render();
 }
+function toggleMarkers(){
+  state.showMarkers = document.getElementById('showMarkers').checked;
+  render();
+}
 
 /* ---------------- Fullscreen / Präsentation ---------------- */
 function enterFullscreen(){
@@ -569,6 +651,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') exitFullscreen();
 function buildExport(){
   return {
     stage:{ name:state.name, screenDiagonalInch:state.diagIn, screenDistanceM:state.screenDistM, aspectRatio:state.aspect },
+    calibrationMarkers: computeCalibFractions(),
     targets: state.targets.map(t=>{
       const def = TARGET_TYPES[t.type];
       const widthCm = def.widthCm*t.scalePct/100, heightCm = def.heightCm*t.scalePct/100;
@@ -643,7 +726,7 @@ async function loadStage(key){
   }catch(err){ setStatus('Laden fehlgeschlagen', true); console.error(err); }
 }
 function newStage(){
-  state = { name:'Neue Stage', diagIn:100, screenDistM:2.5, aspect:1.777, view:'editor', targets:[], selectedId:null };
+  state = { name:'Neue Stage', diagIn:100, screenDistM:2.5, aspect:1.777, view:'editor', targets:[], selectedId:null, showMarkers:true };
   document.getElementById('stageName').value = state.name;
   document.getElementById('diagIn').value = state.diagIn;
   document.getElementById('screenDist').value = state.screenDistM;
