@@ -23,7 +23,29 @@
   .badge.bad{color:var(--danger); border-color:var(--danger);}
   .badge.wait{color:var(--muted);}
 
-  .main{flex:1; display:flex; min-height:0;}
+  .main{flex:1; display:flex; flex-direction:column; min-height:0;}
+  .content-row{flex:1; display:flex; min-height:0;}
+  .table-panel{
+    height:220px; min-height:120px; background:var(--panel); border-top:1px solid var(--border);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .table-panel.collapsed{height:36px;}
+  .table-panel-head{
+    display:flex; align-items:center; gap:10px; padding:6px 14px; border-bottom:1px solid var(--border); cursor:pointer;
+    font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+  }
+  .table-panel-head b{color:var(--text);}
+  .table-panel-body{flex:1; overflow:auto; padding:0 14px;}
+  table.hits{width:100%; border-collapse:collapse; font-family:'JetBrains Mono',monospace; font-size:12px;}
+  table.hits th{text-align:left; color:var(--muted); font-weight:600; padding:6px 8px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--panel);}
+  table.hits td{padding:5px 8px; border-bottom:1px solid rgba(255,255,255,.05);}
+  table.hits tr.miss td{color:var(--danger);}
+  table.hits tr.string-header td{background:var(--panel-2); color:var(--accent); font-weight:600; padding-top:10px;}
+  .par-display{
+    font-family:'Oswald',sans-serif; font-size:34px; font-weight:600; text-align:center; padding:8px 0;
+    color:var(--text);
+  }
+  .par-display.running{color:var(--accent);}
   .video-wrap{flex:1; position:relative; background:#000; overflow:hidden; display:flex; align-items:center; justify-content:center;}
   video{display:none;}
   #overlay{max-width:100%; max-height:100%; width:100%; height:auto;}
@@ -71,6 +93,7 @@
   </div>
 
   <div class="main">
+    <div class="content-row">
     <div class="video-wrap" id="videoWrap">
       <div class="video-hint" id="videoHint">Kamera noch nicht gestartet.</div>
       <video id="video" autoplay playsinline muted></video>
@@ -138,9 +161,34 @@
         </div>
       </div>
 
-      <h2>6. Treffer-Log</h2>
-      <button class="ghost" onclick="clearLog()">Log leeren</button>
-      <div class="log" id="log"></div>
+      <h2>6. Modus</h2>
+      <select id="modeSelect" onchange="selectMode(this.value)">
+        <option value="">— Stage laden für passende Modi —</option>
+      </select>
+      <div class="hint" id="modeHint2" style="margin-bottom:10px;"></div>
+
+      <div id="parTimeControls" style="display:none;">
+        <label class="field">Par-Time: <span id="parTimeVal">2.0</span>s</label>
+        <div class="toggle-group">
+          <button class="ghost" onclick="adjParTime(-0.1)">−0,1s</button>
+          <button class="ghost" onclick="adjParTime(0.1)">+0,1s</button>
+        </div>
+        <div class="par-display" id="parDisplay">2.0</div>
+        <button class="action" onclick="startString()">▶ Start (Beep)</button>
+      </div>
+
+      <button class="ghost" onclick="clearAllHits()">Tabelle leeren</button>
+    </div>
+    </div>
+
+    <div class="table-panel" id="tablePanel">
+      <div class="table-panel-head" onclick="toggleTablePanel()">
+        <span id="tablePanelToggle">▾</span> Treffer-Tabelle — <b id="modeTitle">kein Modus gewählt</b>
+        <span style="margin-left:auto; font-family:'JetBrains Mono',monospace; font-weight:600;" id="totalScore"></span>
+      </div>
+      <div class="table-panel-body" id="tablePanelBody">
+        <div class="hint" style="padding:10px 0;">Stage laden und Modus wählen, dann erscheinen hier die Treffer.</div>
+      </div>
     </div>
   </div>
 </div>
@@ -11750,6 +11798,7 @@ function applyStageData(parsed){
   document.getElementById('dropStage').classList.add('loaded');
   document.getElementById('dropStage').innerHTML = `✓ ${stageData.stage.name} (${stageData.targets.length} Targets)`;
   document.getElementById('stageHint').textContent = `✓ ${stageData.stage.name} geladen (${stageData.targets.length} Targets) — Treffer werden Zonen zugeordnet.`;
+  populateModeSelect();
   recalibrate(); // Marker-Referenzpunkte können sich mit der Stage geändert haben
 }
 
@@ -11829,20 +11878,225 @@ function hitTestStage(normX, normY){
   return null; // außerhalb aller Targets
 }
 
-/* ---------------- Treffer-Log ---------------- */
+/* ==========================================================================
+   MODI-SYSTEM (analog AlphaCore: Sichtbarkeit abhängig von geladenen Targets)
+========================================================================== */
+const STANDARD_IPSC = ['ipsc_classic','ipsc_mini'];
+const NONSTANDARD_IPSC = ['ipsc_classic_ns','ipsc_mini_double','ipsc_classic_half_left','ipsc_classic_half_right'];
+
+const MODE_DEFS = {
+  ipsc_single:    { label:'IPSC Single',    kind:'continuous' },
+  ipsc_multi:     { label:'IPSC Multi',     kind:'continuous' },
+  uspsa_single:   { label:'USPSA Single',   kind:'continuous' },
+  uspsa_multi:    { label:'USPSA Multi',    kind:'continuous' },
+  steel_single:   { label:'Steel Single',   kind:'continuous' },
+  steel_multi:    { label:'Steel Multi',    kind:'continuous' },
+  prazision_single:{ label:'Präzision Single', kind:'continuous' },
+  prazision_multi:{ label:'Präzision Multi', kind:'continuous' },
+  draw_fire:      { label:'Draw & Fire',    kind:'partime', requiredShots:1, parTimeDefault:2.0 },
+  bill_drill:     { label:'Bill Drill',     kind:'partime', requiredShots:6, parTimeDefault:3.0 },
+  el_presidente:  { label:'El Presidente',  kind:'partime', requiredShots:12, parTimeDefault:10.0 }
+};
+
+function getAvailableModes(targets){
+  const types = targets.map(t=>t.type);
+  const hasPraz = types.includes('prazision');
+  const hasPlate = types.includes('plate');
+  const hasUSPSA = types.includes('uspsa');
+  const standardIPSC = types.filter(t=>STANDARD_IPSC.includes(t));
+  const hasNonStdIPSC = types.some(t=>NONSTANDARD_IPSC.includes(t));
+  const hasAnyIPSC = standardIPSC.length>0 || hasNonStdIPSC;
+
+  const out = [];
+  if(hasPraz && !hasAnyIPSC && !hasPlate && !hasUSPSA){
+    out.push('prazision_single');
+    if(types.filter(t=>t==='prazision').length>=2) out.push('prazision_multi');
+    return out;
+  }
+  if(hasPlate && !hasAnyIPSC && !hasUSPSA){
+    out.push('steel_single','steel_multi');
+  }
+  if(hasAnyIPSC){
+    out.push('ipsc_single','ipsc_multi');
+    const counts = {};
+    standardIPSC.forEach(t=>counts[t]=(counts[t]||0)+1);
+    if(Object.values(counts).some(c=>c>=3)) out.push('el_presidente');
+    if(standardIPSC.length===1 && !hasNonStdIPSC && !hasPlate){
+      out.push('draw_fire','bill_drill');
+    }
+  }
+  if(hasUSPSA){
+    out.push('uspsa_single','uspsa_multi');
+  }
+  return out;
+}
+
+function populateModeSelect(){
+  const sel = document.getElementById('modeSelect');
+  if(!stageData){ sel.innerHTML = '<option value="">— Stage laden für passende Modi —</option>'; return; }
+  const modes = getAvailableModes(stageData.targets);
+  if(modes.length===0){ sel.innerHTML = '<option value="">Keine passenden Modi für diese Stage</option>'; return; }
+  sel.innerHTML = '<option value="">— Modus wählen —</option>' +
+    modes.map(m=>`<option value="${m}">${MODE_DEFS[m].label}</option>`).join('');
+}
+
+/* ---------------- Aktiver Modus / Par-Timer / Tabellen-State ---------------- */
+let activeMode = null;
+let parTimeSec = 2.0;
+let parTimerActive = false;
+let parTimerTimeout = null;
+let parCountdownInterval = null;
+let stringStartTime = 0;
+let currentStringHits = [];
+let stringHistory = [];   // Par-Time-Modi: abgeschlossene Strings
+let continuousHits = [];  // Continuous-Modi: laufende Trefferliste
+
+function selectMode(modeKey){
+  activeMode = modeKey || null;
+  currentStringHits = []; stringHistory = []; continuousHits = [];
+  const def = MODE_DEFS[activeMode];
+  document.getElementById('modeTitle').textContent = def ? def.label : 'kein Modus gewählt';
+  document.getElementById('modeHint2').textContent = def
+    ? (def.kind==='partime' ? `${def.requiredShots} Schuss, Par-Time-Drill — "Start" drücken, dann feuern.` : 'Fortlaufende Erfassung — jeder Treffer wird direkt in die Tabelle eingetragen.')
+    : '';
+  const showPar = def && def.kind==='partime';
+  document.getElementById('parTimeControls').style.display = showPar ? 'block' : 'none';
+  if(showPar){
+    parTimeSec = def.parTimeDefault;
+    document.getElementById('parTimeVal').textContent = parTimeSec.toFixed(1);
+    document.getElementById('parDisplay').textContent = parTimeSec.toFixed(1);
+  }
+  renderHitsTable();
+}
+
+function adjParTime(delta){
+  parTimeSec = Math.max(0.5, Math.round((parTimeSec+delta)*10)/10);
+  document.getElementById('parTimeVal').textContent = parTimeSec.toFixed(1);
+  if(!parTimerActive) document.getElementById('parDisplay').textContent = parTimeSec.toFixed(1);
+}
+
+function playBeep(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    osc.frequency.value = 1800; osc.connect(gain); gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.15);
+    osc.start(); osc.stop(ctx.currentTime+0.15);
+  }catch(e){}
+}
+
+function startString(){
+  const def = MODE_DEFS[activeMode];
+  if(!def || def.kind!=='partime') return;
+  currentStringHits = [];
+  parTimerActive = true;
+  stringStartTime = performance.now();
+  playBeep();
+  clearTimeout(parTimerTimeout); clearInterval(parCountdownInterval);
+  document.getElementById('parDisplay').classList.add('running');
+  parTimerTimeout = setTimeout(()=> finalizeString(true), parTimeSec*1000);
+  parCountdownInterval = setInterval(()=>{
+    const remaining = Math.max(0, parTimeSec - (performance.now()-stringStartTime)/1000);
+    document.getElementById('parDisplay').textContent = remaining.toFixed(1);
+  }, 50);
+  renderHitsTable();
+}
+
+function finalizeString(timedOut){
+  if(!parTimerActive) return;
+  parTimerActive = false;
+  clearTimeout(parTimerTimeout); clearInterval(parCountdownInterval);
+  document.getElementById('parDisplay').classList.remove('running');
+  document.getElementById('parDisplay').textContent = parTimeSec.toFixed(1);
+  const def = MODE_DEFS[activeMode];
+  if(timedOut){
+    while(currentStringHits.length < def.requiredShots){
+      currentStringHits.push({ time:parTimeSec, targetId:null, zone:'M', score:0, miss:true });
+    }
+  }
+  stringHistory.unshift({ label:def.label, hits:[...currentStringHits], ts:new Date().toLocaleTimeString('de-DE') });
+  currentStringHits = [];
+  renderHitsTable();
+}
+
+function toggleTablePanel(){
+  const panel = document.getElementById('tablePanel');
+  panel.classList.toggle('collapsed');
+  document.getElementById('tablePanelToggle').textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+}
+function clearAllHits(){ currentStringHits=[]; stringHistory=[]; continuousHits=[]; renderHitsTable(); }
+
+function zoneLabel(h){
+  if(h.miss) return 'M';
+  if(h.noShoot) return h.zone+' (NS)';
+  return h.zone;
+}
+
+function renderHitsTable(){
+  const body = document.getElementById('tablePanelBody');
+  const totalEl = document.getElementById('totalScore');
+  const def = MODE_DEFS[activeMode];
+
+  if(!def){
+    body.innerHTML = '<div class="hint" style="padding:10px 0;">Stage laden und Modus wählen, dann erscheinen hier die Treffer.</div>';
+    totalEl.textContent = '';
+    return;
+  }
+
+  if(def.kind==='continuous'){
+    let sum = 0;
+    const rows = continuousHits.map(h=>{
+      sum += h.score||0;
+      return `<tr class="${h.zone==='Miss'||h.noShoot?'miss':''}"><td>${h.time}</td><td>${h.targetId ?? '-'}</td><td>${zoneLabel(h)}</td><td>${h.score||0}</td></tr>`;
+    }).join('');
+    body.innerHTML = `<table class="hits"><thead><tr><th>Zeit</th><th>Target</th><th>Zone</th><th>Score</th></tr></thead><tbody>${rows||''}</tbody></table>`;
+    totalEl.textContent = `Summe: ${sum}`;
+  } else {
+    let sum = 0;
+    let html = '<table class="hits"><thead><tr><th>#</th><th>Zeit (s)</th><th>Target</th><th>Zone</th><th>Score</th></tr></thead><tbody>';
+    stringHistory.forEach((run, runIdx)=>{
+      html += `<tr class="string-header"><td colspan="5">String ${stringHistory.length-runIdx} — ${run.ts}</td></tr>`;
+      run.hits.forEach((h,i)=>{
+        sum += h.score||0;
+        html += `<tr class="${h.miss||h.noShoot?'miss':''}"><td>${i+1}</td><td>${h.time.toFixed(2)}</td><td>${h.targetId ?? '-'}</td><td>${zoneLabel(h)}</td><td>${h.score||0}</td></tr>`;
+      });
+    });
+    if(currentStringHits.length){
+      html += `<tr class="string-header"><td colspan="5">Läuft…</td></tr>`;
+      currentStringHits.forEach((h,i)=>{
+        sum += h.score||0;
+        html += `<tr class="${h.miss||h.noShoot?'miss':''}"><td>${i+1}</td><td>${h.time.toFixed(2)}</td><td>${h.targetId ?? '-'}</td><td>${zoneLabel(h)}</td><td>${h.score||0}</td></tr>`;
+      });
+    }
+    html += '</tbody></table>';
+    body.innerHTML = html;
+    totalEl.textContent = `Summe: ${sum}`;
+  }
+}
+
+/* ---------------- Treffer-Erfassung ---------------- */
 function registerHit(normX, normY){
   const result = hitTestStage(normX, normY);
-  const row = document.createElement('div');
-  row.className = 'log-row' + (result && (result.zone==='Miss'||result.noShoot) ? ' miss':'');
-  const time = new Date().toLocaleTimeString('de-DE');
-  if(result){
-    row.innerHTML = `<span>${time} · Target ${result.targetId}</span><span class="zone">${result.zone}${result.score?(' ('+result.score+')'):''}</span>`;
+  const def = MODE_DEFS[activeMode];
+
+  if(def && def.kind==='partime'){
+    if(!parTimerActive) return; // außerhalb der String-Zeit ignorieren
+    const elapsed = (performance.now()-stringStartTime)/1000;
+    currentStringHits.push({
+      time: elapsed, targetId: result?result.targetId:null,
+      zone: result?result.zone:'-', score: result?result.score:0, noShoot: !!(result&&result.noShoot)
+    });
+    if(currentStringHits.length >= def.requiredShots) finalizeString(false);
+    renderHitsTable();
   } else {
-    row.innerHTML = `<span>${time} · x=${normX.toFixed(2)} y=${normY.toFixed(2)}</span><span class="zone">kein Target</span>`;
+    continuousHits.push({
+      time: new Date().toLocaleTimeString('de-DE'), targetId: result?result.targetId:null,
+      zone: result?result.zone:'kein Target', score: result?result.score:0, noShoot: !!(result&&result.noShoot)
+    });
+    renderHitsTable();
   }
-  document.getElementById('log').appendChild(row);
 }
-function clearLog(){ document.getElementById('log').innerHTML=''; }
 </script>
 </body>
 </html>
