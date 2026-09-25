@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scoreboard — Beamer Training</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#14161a; --panel:#1c1f24; --panel-2:#20242a; --border:#2c3038;
+    --text:#e8e6e1; --muted:#8b8f97; --accent:#e8873a; --safe:#6fcf7b; --danger:#d9534f;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%; margin:0;}
+  body{background:var(--bg-deep); color:var(--text); font-family:'Inter',system-ui,sans-serif;}
+  .app{display:flex; flex-direction:column; height:100vh;}
+
+  .topbar{display:flex; align-items:center; gap:14px; padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap;}
+  .topbar .eyebrow{font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; color:var(--accent); text-transform:uppercase;}
+  .topbar h1{font-family:'Oswald',sans-serif; font-size:16px; font-weight:600; margin:0; text-transform:uppercase; letter-spacing:.02em;}
+  .fb-status{display:flex; align-items:center; gap:8px; font-family:'JetBrains Mono',monospace; font-size:12px; padding:6px 12px; border-radius:20px; border:1px solid var(--border);}
+  .fb-dot{width:8px; height:8px; border-radius:50%; background:var(--muted);}
+  .fb-dot.ok{background:var(--safe);} .fb-dot.bad{background:var(--danger);}
+  .spacer{flex:1;}
+  button{font-family:'Inter',sans-serif; font-weight:600; font-size:13px; border-radius:4px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); padding:9px 16px; cursor:pointer;}
+  button:hover{border-color:var(--accent);}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#1a1200;}
+  button.ghost{background:transparent;}
+
+  .config-panel{padding:24px; max-width:520px; margin:60px auto; background:var(--panel); border:1px solid var(--border); border-radius:8px;}
+  .config-panel h2{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.03em; margin-top:0;}
+  label.field{display:block; font-size:11px; color:var(--muted); margin-bottom:5px; font-family:'JetBrains Mono',monospace;}
+  textarea, input[type=text], select{
+    width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:4px;
+    padding:10px; font-family:'JetBrains Mono',monospace; font-size:13px; margin-bottom:14px;
+  }
+  textarea{min-height:110px; resize:vertical;}
+  .file-drop{border:2px dashed var(--border); border-radius:6px; padding:16px; text-align:center; font-size:13px; color:var(--muted); cursor:pointer; margin-bottom:14px;}
+  .file-drop.loaded{border-color:var(--safe); color:var(--safe);}
+  input[type=file]{display:none;}
+
+  .control-bar{display:flex; align-items:center; gap:24px; padding:18px 28px; background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap;}
+  .control-group{display:flex; flex-direction:column; gap:6px;}
+  .control-group label{font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;}
+  select#modeSelect{width:260px; margin-bottom:0; font-size:15px; padding:12px;}
+  .par-controls{display:flex; align-items:center; gap:10px;}
+  .par-btn{padding:8px 14px; font-size:16px;}
+  .par-display{
+    font-family:'Oswald',sans-serif; font-size:64px; font-weight:700; min-width:160px; text-align:center;
+    color:var(--text); background:var(--panel-2); border-radius:8px; padding:6px 20px; line-height:1;
+  }
+  .par-display.running{color:var(--accent); background:rgba(232,135,58,.12);}
+  #startBtn{font-size:18px; padding:16px 32px;}
+  #startBtn:disabled{opacity:.4; cursor:not-allowed;}
+  .score-total{font-family:'Oswald',sans-serif; font-size:28px; font-weight:600; margin-left:auto;}
+  .score-total b{color:var(--accent);}
+
+  .table-wrap{flex:1; overflow:auto; padding:0 28px;}
+  table.hits{width:100%; border-collapse:collapse; font-family:'JetBrains Mono',monospace; font-size:16px;}
+  table.hits th{
+    text-align:left; color:var(--muted); font-weight:600; padding:12px 14px; border-bottom:2px solid var(--border);
+    position:sticky; top:0; background:var(--bg-deep); text-transform:uppercase; font-size:12px; letter-spacing:.05em;
+  }
+  table.hits td{padding:10px 14px; border-bottom:1px solid rgba(255,255,255,.06);}
+  table.hits tr.miss td{color:var(--danger);}
+  table.hits tr.string-header td{background:var(--panel); color:var(--accent); font-weight:700; padding-top:20px; font-size:14px;}
+  table.hits tr.zone-A td:nth-child(4){color:var(--safe); font-weight:700;}
+  .empty-hint{padding:60px 0; text-align:center; color:var(--muted); font-family:'JetBrains Mono',monospace;}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <div class="topbar">
+    <div>
+      <div class="eyebrow">Beamer Training // Scoreboard</div>
+      <h1>Scoreboard</h1>
+    </div>
+    <div class="fb-status" id="fbStatus"><div class="fb-dot" id="fbDot"></div><span id="fbStatusText">Nicht konfiguriert</span></div>
+    <div class="spacer"></div>
+    <button class="ghost" onclick="showConfig()">⚙ Einstellungen</button>
+  </div>
+
+  <div id="configPanel" class="config-panel">
+    <h2>Verbindung einrichten</h2>
+    <label class="field">Relay-Adresse (auf diesem Laptop mit "node relay-server.js" gestartet)</label>
+    <input type="text" id="relayAddrInput" placeholder="localhost:8787">
+    <label class="field">Session-ID (identisch zum Handy)</label>
+    <input type="text" id="sessionIdInput" value="default">
+    <label class="field">Stage-JSON laden (für die Modi-Auswahl — Export aus dem Stage-Builder)</label>
+    <div class="file-drop" id="dropStage" onclick="document.getElementById('fileStage').click()">
+      📁 Stage-JSON auswählen
+    </div>
+    <input type="file" id="fileStage" accept="application/json,.json">
+    <button class="primary" style="width:100%; margin-top:10px;" onclick="connectRelay()">Verbinden &amp; Starten</button>
+  </div>
+
+  <div id="mainView" style="display:none; flex:1; display:none; flex-direction:column; min-height:0;">
+    <div class="control-bar">
+      <div class="control-group">
+        <label>Modus</label>
+        <select id="modeSelect" onchange="selectMode(this.value)"><option value="">— Modus wählen —</option></select>
+      </div>
+      <div class="control-group" id="parGroup" style="display:none;">
+        <label>Par-Time</label>
+        <div class="par-controls">
+          <button class="par-btn" onclick="adjParTime(-0.1)">−</button>
+          <div class="par-display" id="parDisplay">2.0</div>
+          <button class="par-btn" onclick="adjParTime(0.1)">+</button>
+        </div>
+      </div>
+      <div class="control-group" id="startGroup" style="display:none;">
+        <label>&nbsp;</label>
+        <button class="primary" id="startBtn" onclick="startString()">▶ Start (Beep)</button>
+      </div>
+      <div class="score-total" id="scoreTotal"></div>
+      <button class="ghost" onclick="clearAllHits()">Tabelle leeren</button>
+    </div>
+    <div class="table-wrap">
+      <table class="hits" id="hitsTable"><thead></thead><tbody></tbody></table>
+      <div class="empty-hint" id="emptyHint">Modus wählen — Treffer erscheinen hier live, sobald das Handy sie erkennt.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   MODI-SYSTEM (identisch zur Logik in live-camera-app.html / AlphaCore)
+========================================================================== */
+const STANDARD_IPSC = ['ipsc_classic','ipsc_mini'];
+const NONSTANDARD_IPSC = ['ipsc_classic_ns','ipsc_mini_double','ipsc_classic_half_left','ipsc_classic_half_right'];
+
+const MODE_DEFS = {
+  ipsc_single:    { label:'IPSC Single',    kind:'continuous' },
+  ipsc_multi:     { label:'IPSC Multi',     kind:'continuous' },
+  uspsa_single:   { label:'USPSA Single',   kind:'continuous' },
+  uspsa_multi:    { label:'USPSA Multi',    kind:'continuous' },
+  steel_single:   { label:'Steel Single',   kind:'continuous' },
+  steel_multi:    { label:'Steel Multi',    kind:'continuous' },
+  prazision_single:{ label:'Präzision Single', kind:'continuous' },
+  prazision_multi:{ label:'Präzision Multi', kind:'continuous' },
+  draw_fire:      { label:'Draw & Fire',    kind:'partime', requiredShots:1, parTimeDefault:2.0 },
+  bill_drill:     { label:'Bill Drill',     kind:'partime', requiredShots:6, parTimeDefault:3.0 },
+  el_presidente:  { label:'El Presidente',  kind:'partime', requiredShots:12, parTimeDefault:10.0 }
+};
+
+function getAvailableModes(targets){
+  const types = targets.map(t=>t.type);
+  const hasPraz = types.includes('prazision');
+  const hasPlate = types.includes('plate');
+  const hasUSPSA = types.includes('uspsa');
+  const standardIPSC = types.filter(t=>STANDARD_IPSC.includes(t));
+  const hasNonStdIPSC = types.some(t=>NONSTANDARD_IPSC.includes(t));
+  const hasAnyIPSC = standardIPSC.length>0 || hasNonStdIPSC;
+
+  const out = [];
+  if(hasPraz && !hasAnyIPSC && !hasPlate && !hasUSPSA){
+    out.push('prazision_single');
+    if(types.filter(t=>t==='prazision').length>=2) out.push('prazision_multi');
+    return out;
+  }
+  if(hasPlate && !hasAnyIPSC && !hasUSPSA){
+    out.push('steel_single','steel_multi');
+  }
+  if(hasAnyIPSC){
+    out.push('ipsc_single','ipsc_multi');
+    const counts = {};
+    standardIPSC.forEach(t=>counts[t]=(counts[t]||0)+1);
+    if(Object.values(counts).some(c=>c>=3)) out.push('el_presidente');
+    if(standardIPSC.length===1 && !hasNonStdIPSC && !hasPlate){
+      out.push('draw_fire','bill_drill');
+    }
+  }
+  if(hasUSPSA){
+    out.push('uspsa_single','uspsa_multi');
+  }
+  return out;
+}
+
+/* ==========================================================================
+   RELAY-VERBINDUNG
+========================================================================== */
+let ws = null, wsConnected = false, wsReconnectTimer = null;
+let stageTargets = null;
+let currentRoom = 'default';
+
+function setFbStatus(ok, text){
+  document.getElementById('fbDot').className = 'fb-dot' + (ok===true?' ok':ok===false?' bad':'');
+  document.getElementById('fbStatusText').textContent = text;
+}
+function showConfig(){
+  document.getElementById('configPanel').style.display = 'block';
+  document.getElementById('mainView').style.display = 'none';
+}
+
+document.getElementById('fileStage').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    try{
+      const parsed = JSON.parse(ev.target.result);
+      stageTargets = parsed.targets;
+      document.getElementById('dropStage').classList.add('loaded');
+      document.getElementById('dropStage').textContent = `✓ ${parsed.stage.name} (${stageTargets.length} Targets)`;
+    }catch(err){ alert('Konnte Stage-JSON nicht lesen: ' + err.message); }
+  };
+  reader.readAsText(file);
+});
+
+function connectRelay(){
+  const addr = document.getElementById('relayAddrInput').value.trim();
+  const sessionId = document.getElementById('sessionIdInput').value.trim() || 'default';
+  if(!stageTargets){ alert('Bitte zuerst eine Stage-JSON laden (für die Modi-Auswahl).'); return; }
+  if(!addr){ setFbStatus(false, 'Bitte Relay-Adresse eingeben'); return; }
+  currentRoom = sessionId;
+  localStorage.setItem('bt_relayAddr_sb', addr);
+  localStorage.setItem('bt_sessionId_sb', sessionId);
+
+  document.getElementById('configPanel').style.display = 'none';
+  document.getElementById('mainView').style.display = 'flex';
+  populateModeSelect();
+  openSocket(addr, sessionId);
+}
+
+function openSocket(addr, sessionId){
+  clearTimeout(wsReconnectTimer);
+  setFbStatus(null, 'Verbinde…');
+  try{ ws = new WebSocket('ws://' + addr); }
+  catch(err){ setFbStatus(false, 'Ungültige Adresse'); return; }
+
+  ws.addEventListener('open', ()=>{
+    wsConnected = true;
+    setFbStatus(true, 'Verbunden — "' + sessionId + '"');
+    ws.send(JSON.stringify({ type:'join', room:sessionId }));
+  });
+
+  ws.addEventListener('message', ev=>{
+    let msg;
+    try{ msg = JSON.parse(ev.data); }catch(e){ return; }
+    if(msg.type==='sync'){
+      // Historie beim (Wieder-)Verbinden nachladen: vorhandene Hits + letzten State
+      if(msg.state && msg.state.activeMode){
+        document.getElementById('modeSelect').value = msg.state.activeMode;
+        selectMode(msg.state.activeMode, true);
+      }
+      (msg.hits||[]).forEach(handleIncomingHit);
+    } else if(msg.type==='state'){
+      handleIncomingState(msg);
+    } else if(msg.type==='hit'){
+      handleIncomingHit(msg);
+    } else if(msg.type==='clear'){
+      currentStringHits=[]; stringHistory=[]; continuousHits=[]; renderTable();
+    }
+  });
+
+  ws.addEventListener('close', ()=>{
+    wsConnected = false;
+    setFbStatus(false, 'Verbindung verloren — versuche erneut…');
+    wsReconnectTimer = setTimeout(()=>openSocket(addr, sessionId), 2000);
+  });
+  ws.addEventListener('error', ()=>{ setFbStatus(false, 'Verbindungsfehler'); });
+}
+
+window.addEventListener('load', ()=>{
+  const savedAddr = localStorage.getItem('bt_relayAddr_sb');
+  const savedSession = localStorage.getItem('bt_sessionId_sb');
+  if(savedAddr) document.getElementById('relayAddrInput').value = savedAddr;
+  if(savedSession) document.getElementById('sessionIdInput').value = savedSession;
+});
+
+function populateModeSelect(){
+  const sel = document.getElementById('modeSelect');
+  const modes = getAvailableModes(stageTargets);
+  sel.innerHTML = modes.length
+    ? '<option value="">— Modus wählen —</option>' + modes.map(m=>`<option value="${m}">${MODE_DEFS[m].label}</option>`).join('')
+    : '<option value="">Keine passenden Modi für diese Stage</option>';
+}
+
+/* ==========================================================================
+   MODUS / PAR-TIMER / TABELLE
+========================================================================== */
+let activeMode = null;
+let parTimeSec = 2.0;
+let parTimerActive = false;
+let parCountdownInterval = null;
+let stringStartTs = 0;
+let currentStringHits = [];
+let stringHistory = [];
+let continuousHits = [];
+let listenStartedAt = 0; // Firebase-Hits vor diesem Zeitpunkt werden ignoriert (kein Replay alter Sessions)
+
+function selectMode(modeKey, fromSync){
+  activeMode = modeKey || null;
+  currentStringHits = []; stringHistory = []; continuousHits = [];
+  listenStartedAt = Date.now();
+  const def = MODE_DEFS[activeMode];
+  document.getElementById('parGroup').style.display = def && def.kind==='partime' ? 'flex' : 'none';
+  document.getElementById('startGroup').style.display = def && def.kind==='partime' ? 'flex' : 'none';
+  if(def && def.kind==='partime'){
+    parTimeSec = def.parTimeDefault;
+    document.getElementById('parDisplay').textContent = parTimeSec.toFixed(1);
+  }
+  if(!fromSync && wsConnected) ws.send(JSON.stringify({ type:'state', activeMode, parTimeSec }));
+  renderTable();
+}
+
+function adjParTime(delta){
+  parTimeSec = Math.max(0.5, Math.round((parTimeSec+delta)*10)/10);
+  if(!parTimerActive) document.getElementById('parDisplay').textContent = parTimeSec.toFixed(1);
+  if(wsConnected) ws.send(JSON.stringify({ type:'state', parTimeSec }));
+}
+
+function playBeep(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    osc.frequency.value = 1800; osc.connect(gain); gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.15);
+    osc.start(); osc.stop(ctx.currentTime+0.15);
+  }catch(e){}
+}
+
+function startString(){
+  if(!activeMode || !wsConnected) return;
+  playBeep();
+  ws.send(JSON.stringify({ type:'state', stringActive:true, activeMode, parTimeSec }));
+}
+
+function handleIncomingState(state){
+  if(state.activeMode && state.activeMode !== activeMode){
+    document.getElementById('modeSelect').value = state.activeMode;
+    selectMode(state.activeMode, true);
+  }
+  if(typeof state.parTimeSec === 'number'){
+    parTimeSec = state.parTimeSec;
+    if(!parTimerActive) document.getElementById('parDisplay').textContent = parTimeSec.toFixed(1);
+  }
+  if(state.stringActive && !parTimerActive){
+    beginLocalString(state.stringStartTs);
+  }
+  if(state.stringActive===false && parTimerActive){
+    finalizeString(false);
+  }
+}
+
+function beginLocalString(startTs){
+  currentStringHits = [];
+  parTimerActive = true;
+  stringStartTs = startTs;
+  document.getElementById('parDisplay').classList.add('running');
+  clearInterval(parCountdownInterval);
+  parCountdownInterval = setInterval(()=>{
+    const elapsed = (Date.now()-stringStartTs)/1000;
+    const remaining = Math.max(0, parTimeSec-elapsed);
+    document.getElementById('parDisplay').textContent = remaining.toFixed(1);
+    if(remaining<=0) finalizeString(true);
+  }, 50);
+  renderTable();
+}
+
+function finalizeString(timedOut){
+  if(!parTimerActive) return;
+  parTimerActive = false;
+  clearInterval(parCountdownInterval);
+  document.getElementById('parDisplay').classList.remove('running');
+  document.getElementById('parDisplay').textContent = parTimeSec.toFixed(1);
+  const def = MODE_DEFS[activeMode];
+  if(timedOut){
+    while(currentStringHits.length < def.requiredShots){
+      currentStringHits.push({ time:parTimeSec, targetId:null, zone:'M', score:0, miss:true });
+    }
+    if(wsConnected) ws.send(JSON.stringify({ type:'state', stringActive:false }));
+  }
+  stringHistory.unshift({ label:def.label, hits:[...currentStringHits], ts:new Date().toLocaleTimeString('de-DE') });
+  currentStringHits = [];
+  renderTable();
+}
+
+function handleIncomingHit(hit){
+  if(!hit || !hit.ts || hit.ts < listenStartedAt) return; // alte/fremde Session-Hits ignorieren
+  const def = MODE_DEFS[activeMode];
+  if(!def) return;
+  if(def.kind==='partime'){
+    if(!parTimerActive) return;
+    currentStringHits.push({ time:(hit.ts-stringStartTs)/1000, targetId:hit.targetId, zone:hit.zone||'-', score:hit.score||0, noShoot:!!hit.noShoot });
+    if(currentStringHits.length>=def.requiredShots) finalizeString(false);
+  } else {
+    continuousHits.push({ time:new Date(hit.ts).toLocaleTimeString('de-DE'), targetId:hit.targetId, zone:hit.zone||'kein Target', score:hit.score||0, noShoot:!!hit.noShoot });
+  }
+  renderTable();
+}
+
+function clearAllHits(){
+  currentStringHits=[]; stringHistory=[]; continuousHits=[]; renderTable();
+  if(wsConnected) ws.send(JSON.stringify({ type:'clear' }));
+}
+
+function zoneLabel(h){
+  if(h.miss) return 'M';
+  if(h.noShoot) return h.zone+' (NS)';
+  return h.zone;
+}
+
+function renderTable(){
+  const table = document.getElementById('hitsTable');
+  const emptyHint = document.getElementById('emptyHint');
+  const totalEl = document.getElementById('scoreTotal');
+  const def = MODE_DEFS[activeMode];
+
+  if(!def || (def.kind==='continuous' && continuousHits.length===0) || (def.kind==='partime' && stringHistory.length===0 && currentStringHits.length===0)){
+    table.style.display='none'; emptyHint.style.display='block';
+    totalEl.innerHTML = '';
+    if(!def) emptyHint.textContent = 'Modus wählen — Treffer erscheinen hier live, sobald das Handy sie erkennt.';
+    return;
+  }
+  table.style.display='table'; emptyHint.style.display='none';
+
+  let sum = 0;
+  if(def.kind==='continuous'){
+    const rows = continuousHits.map(h=>{
+      sum += h.score||0;
+      const cls = (h.zone==='Miss'||h.noShoot) ? 'miss' : (h.zone==='A' ? 'zone-A' : '');
+      return `<tr class="${cls}"><td>${h.time}</td><td>${h.targetId ?? '-'}</td><td>${zoneLabel(h)}</td><td>${h.score||0}</td></tr>`;
+    }).join('');
+    table.querySelector('thead').innerHTML = '<tr><th>Zeit</th><th>Target</th><th>Zone</th><th>Score</th></tr>';
+    table.querySelector('tbody').innerHTML = rows;
+  } else {
+    let html = '';
+    stringHistory.forEach((run, idx)=>{
+      html += `<tr class="string-header"><td colspan="5">String ${stringHistory.length-idx} — ${run.ts}</td></tr>`;
+      run.hits.forEach((h,i)=>{
+        sum += h.score||0;
+        const cls = h.miss||h.noShoot ? 'miss' : (h.zone==='A' ? 'zone-A' : '');
+        html += `<tr class="${cls}"><td>${i+1}</td><td>${h.time.toFixed(2)}</td><td>${h.targetId ?? '-'}</td><td>${zoneLabel(h)}</td><td>${h.score||0}</td></tr>`;
+      });
+    });
+    if(currentStringHits.length){
+      html += `<tr class="string-header"><td colspan="5">Läuft…</td></tr>`;
+      currentStringHits.forEach((h,i)=>{
+        sum += h.score||0;
+        const cls = h.miss||h.noShoot ? 'miss' : (h.zone==='A' ? 'zone-A' : '');
+        html += `<tr class="${cls}"><td>${i+1}</td><td>${h.time.toFixed(2)}</td><td>${h.targetId ?? '-'}</td><td>${zoneLabel(h)}</td><td>${h.score||0}</td></tr>`;
+      });
+    }
+    table.querySelector('thead').innerHTML = '<tr><th>#</th><th>Zeit (s)</th><th>Target</th><th>Zone</th><th>Score</th></tr>';
+    table.querySelector('tbody').innerHTML = html;
+  }
+  totalEl.innerHTML = `Summe: <b>${sum}</b>`;
+}
+</script>
+</body>
+</html>
