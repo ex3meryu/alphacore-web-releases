@@ -23,29 +23,23 @@
   .badge.bad{color:var(--danger); border-color:var(--danger);}
   .badge.wait{color:var(--muted);}
 
-  .main{flex:1; display:flex; flex-direction:column; min-height:0;}
-  .content-row{flex:1; display:flex; min-height:0;}
-  .table-panel{
-    height:220px; min-height:120px; background:var(--panel); border-top:1px solid var(--border);
-    display:flex; flex-direction:column; overflow:hidden;
+  .main{flex:1; display:flex; min-height:0;}
+  .fb-status{
+    display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:4px; margin-bottom:10px;
+    font-family:'JetBrains Mono',monospace; font-size:11px; border:1px solid var(--border); background:var(--panel-2);
   }
-  .table-panel.collapsed{height:36px;}
-  .table-panel-head{
-    display:flex; align-items:center; gap:10px; padding:6px 14px; border-bottom:1px solid var(--border); cursor:pointer;
-    font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+  .fb-dot{width:8px; height:8px; border-radius:50%; background:var(--muted); flex-shrink:0;}
+  .fb-dot.ok{background:var(--safe);}
+  .fb-dot.bad{background:var(--danger);}
+  input.relay-addr{
+    width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:3px;
+    font-family:'JetBrains Mono',monospace; font-size:13px; padding:8px; margin-bottom:8px;
   }
-  .table-panel-head b{color:var(--text);}
-  .table-panel-body{flex:1; overflow:auto; padding:0 14px;}
-  table.hits{width:100%; border-collapse:collapse; font-family:'JetBrains Mono',monospace; font-size:12px;}
-  table.hits th{text-align:left; color:var(--muted); font-weight:600; padding:6px 8px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--panel);}
-  table.hits td{padding:5px 8px; border-bottom:1px solid rgba(255,255,255,.05);}
-  table.hits tr.miss td{color:var(--danger);}
-  table.hits tr.string-header td{background:var(--panel-2); color:var(--accent); font-weight:600; padding-top:10px;}
-  .par-display{
-    font-family:'Oswald',sans-serif; font-size:34px; font-weight:600; text-align:center; padding:8px 0;
-    color:var(--text);
+  .par-mini{
+    text-align:center; font-family:'Oswald',sans-serif; font-size:44px; font-weight:600; color:var(--text);
+    padding:6px 0; border-radius:4px; background:var(--panel-2); margin-bottom:8px;
   }
-  .par-display.running{color:var(--accent);}
+  .par-mini.running{color:var(--accent); background:rgba(232,135,58,.1);}
   .video-wrap{flex:1; position:relative; background:#000; overflow:hidden; display:flex; align-items:center; justify-content:center;}
   video{display:none;}
   #overlay{max-width:100%; max-height:100%; width:100%; height:auto;}
@@ -93,7 +87,6 @@
   </div>
 
   <div class="main">
-    <div class="content-row">
     <div class="video-wrap" id="videoWrap">
       <div class="video-hint" id="videoHint">Kamera noch nicht gestartet.</div>
       <video id="video" autoplay playsinline muted></video>
@@ -125,7 +118,7 @@
         <button class="action" onclick="startQRScan()">QR-Code scannen (Kamera muss laufen)</button>
         <div class="hint">Stage-Builder → "QR-Code anzeigen" auf einem zweiten Bildschirm öffnen, dann hier scannen.</div>
       </div>
-      <div class="hint" id="stageHint">Ohne Stage: nur rohe Bildschirm-Koordinate, keine Zonen-Zuordnung.</div>
+      <div class="hint" id="stageHint">Wird nur für die Kalibriermarker-Position gebraucht — Zonen-Auswertung läuft jetzt im Scoreboard.</div>
 
       <h2>3. Kalibrierung</h2>
       <button class="ghost" onclick="recalibrate()">Neu kalibrieren</button>
@@ -161,33 +154,19 @@
         </div>
       </div>
 
-      <h2>6. Modus</h2>
-      <select id="modeSelect" onchange="selectMode(this.value)">
-        <option value="">— Stage laden für passende Modi —</option>
-      </select>
-      <div class="hint" id="modeHint2" style="margin-bottom:10px;"></div>
-
-      <div id="parTimeControls" style="display:none;">
-        <label class="field">Par-Time: <span id="parTimeVal">2.0</span>s</label>
-        <div class="toggle-group">
-          <button class="ghost" onclick="adjParTime(-0.1)">−0,1s</button>
-          <button class="ghost" onclick="adjParTime(0.1)">+0,1s</button>
-        </div>
-        <div class="par-display" id="parDisplay">2.0</div>
-        <button class="action" onclick="startString()">▶ Start (Beep)</button>
+      <h2>6. Scoreboard-Sync</h2>
+      <div class="fb-status" id="fbStatus"><div class="fb-dot" id="fbDot"></div><span id="fbStatusText">Nicht verbunden</span></div>
+      <div id="fbConfigBox">
+        <label class="field">Relay-Adresse (auf dem Laptop mit "node relay-server.js" gestartet)</label>
+        <input type="text" class="relay-addr" id="relayAddrInput" placeholder="192.168.1.23:8787">
+        <label class="field">Session-ID (auf beiden Geräten identisch)</label>
+        <input type="text" id="sessionIdInput" value="default" style="width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text); padding:7px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace; font-size:13px; margin-bottom:10px;">
+        <button class="action" onclick="connectRelay()">Verbinden</button>
+        <div class="hint">Handy muss im selben WLAN sein wie der Laptop, auf dem der Relay-Server läuft.</div>
       </div>
-
-      <button class="ghost" onclick="clearAllHits()">Tabelle leeren</button>
-    </div>
-    </div>
-
-    <div class="table-panel" id="tablePanel">
-      <div class="table-panel-head" onclick="toggleTablePanel()">
-        <span id="tablePanelToggle">▾</span> Treffer-Tabelle — <b id="modeTitle">kein Modus gewählt</b>
-        <span style="margin-left:auto; font-family:'JetBrains Mono',monospace; font-weight:600;" id="totalScore"></span>
-      </div>
-      <div class="table-panel-body" id="tablePanelBody">
-        <div class="hint" style="padding:10px 0;">Stage laden und Modus wählen, dann erscheinen hier die Treffer.</div>
+      <div id="parMiniBox" style="display:none;">
+        <div class="par-mini" id="parMini">–</div>
+        <button class="ghost" onclick="startString()">▶ Start (Beep) — Fallback, normalerweise vom Scoreboard</button>
       </div>
     </div>
   </div>
@@ -11798,7 +11777,6 @@ function applyStageData(parsed){
   document.getElementById('dropStage').classList.add('loaded');
   document.getElementById('dropStage').innerHTML = `✓ ${stageData.stage.name} (${stageData.targets.length} Targets)`;
   document.getElementById('stageHint').textContent = `✓ ${stageData.stage.name} geladen (${stageData.targets.length} Targets) — Treffer werden Zonen zugeordnet.`;
-  populateModeSelect();
   recalibrate(); // Marker-Referenzpunkte können sich mit der Stage geändert haben
 }
 
@@ -11879,100 +11857,98 @@ function hitTestStage(normX, normY){
 }
 
 /* ==========================================================================
-   MODI-SYSTEM (analog AlphaCore: Sichtbarkeit abhängig von geladenen Targets)
+   RELAY-SYNC (Scoreboard-Trennung: Handy erkennt/berechnet Treffer lokal
+   und schickt sie per WebSocket an den lokalen Relay-Server; die Tabelle/
+   Modi-Auswahl läuft auf dem Scoreboard, siehe scoreboard.html)
 ========================================================================== */
-const STANDARD_IPSC = ['ipsc_classic','ipsc_mini'];
-const NONSTANDARD_IPSC = ['ipsc_classic_ns','ipsc_mini_double','ipsc_classic_half_left','ipsc_classic_half_right'];
+let ws = null;
+let wsConnected = false;
+let wsReconnectTimer = null;
+let syncedActiveMode = null, syncedParTimeSec = 2.0;
+let localCountdownInterval = null;
+let currentRoom = 'default';
 
-const MODE_DEFS = {
-  ipsc_single:    { label:'IPSC Single',    kind:'continuous' },
-  ipsc_multi:     { label:'IPSC Multi',     kind:'continuous' },
-  uspsa_single:   { label:'USPSA Single',   kind:'continuous' },
-  uspsa_multi:    { label:'USPSA Multi',    kind:'continuous' },
-  steel_single:   { label:'Steel Single',   kind:'continuous' },
-  steel_multi:    { label:'Steel Multi',    kind:'continuous' },
-  prazision_single:{ label:'Präzision Single', kind:'continuous' },
-  prazision_multi:{ label:'Präzision Multi', kind:'continuous' },
-  draw_fire:      { label:'Draw & Fire',    kind:'partime', requiredShots:1, parTimeDefault:2.0 },
-  bill_drill:     { label:'Bill Drill',     kind:'partime', requiredShots:6, parTimeDefault:3.0 },
-  el_presidente:  { label:'El Presidente',  kind:'partime', requiredShots:12, parTimeDefault:10.0 }
-};
+function setFbStatus(ok, text){
+  document.getElementById('fbDot').className = 'fb-dot' + (ok===true?' ok':ok===false?' bad':'');
+  document.getElementById('fbStatusText').textContent = text;
+}
 
-function getAvailableModes(targets){
-  const types = targets.map(t=>t.type);
-  const hasPraz = types.includes('prazision');
-  const hasPlate = types.includes('plate');
-  const hasUSPSA = types.includes('uspsa');
-  const standardIPSC = types.filter(t=>STANDARD_IPSC.includes(t));
-  const hasNonStdIPSC = types.some(t=>NONSTANDARD_IPSC.includes(t));
-  const hasAnyIPSC = standardIPSC.length>0 || hasNonStdIPSC;
+function connectRelay(){
+  const addr = document.getElementById('relayAddrInput').value.trim();
+  const sessionId = document.getElementById('sessionIdInput').value.trim() || 'default';
+  if(!addr){ setFbStatus(false, 'Bitte Relay-Adresse eingeben'); return; }
+  currentRoom = sessionId;
+  localStorage.setItem('bt_relayAddr', addr);
+  localStorage.setItem('bt_sessionId', sessionId);
+  openSocket(addr, sessionId);
+}
 
-  const out = [];
-  if(hasPraz && !hasAnyIPSC && !hasPlate && !hasUSPSA){
-    out.push('prazision_single');
-    if(types.filter(t=>t==='prazision').length>=2) out.push('prazision_multi');
-    return out;
+function openSocket(addr, sessionId){
+  clearTimeout(wsReconnectTimer);
+  setFbStatus(null, 'Verbinde…');
+  try{
+    ws = new WebSocket('ws://' + addr);
+  }catch(err){
+    setFbStatus(false, 'Ungültige Adresse');
+    return;
   }
-  if(hasPlate && !hasAnyIPSC && !hasUSPSA){
-    out.push('steel_single','steel_multi');
-  }
-  if(hasAnyIPSC){
-    out.push('ipsc_single','ipsc_multi');
-    const counts = {};
-    standardIPSC.forEach(t=>counts[t]=(counts[t]||0)+1);
-    if(Object.values(counts).some(c=>c>=3)) out.push('el_presidente');
-    if(standardIPSC.length===1 && !hasNonStdIPSC && !hasPlate){
-      out.push('draw_fire','bill_drill');
+
+  ws.addEventListener('open', ()=>{
+    wsConnected = true;
+    setFbStatus(true, 'Verbunden — Session "' + sessionId + '"');
+    document.getElementById('fbConfigBox').style.display = 'none';
+    document.getElementById('parMiniBox').style.display = 'block';
+    ws.send(JSON.stringify({ type:'join', room:sessionId }));
+  });
+
+  ws.addEventListener('message', ev=>{
+    let msg;
+    try{ msg = JSON.parse(ev.data); }catch(e){ return; }
+    if(msg.type==='sync' || msg.type==='state'){
+      const state = msg.type==='sync' ? msg.state : msg;
+      if(!state) return;
+      syncedActiveMode = state.activeMode || syncedActiveMode;
+      syncedParTimeSec = state.parTimeSec || syncedParTimeSec;
+      if(state.stringActive){
+        runLocalCountdown(state.stringStartTs);
+      }
     }
-  }
-  if(hasUSPSA){
-    out.push('uspsa_single','uspsa_multi');
-  }
-  return out;
+  });
+
+  ws.addEventListener('close', ()=>{
+    wsConnected = false;
+    setFbStatus(false, 'Verbindung verloren — versuche erneut…');
+    wsReconnectTimer = setTimeout(()=>openSocket(addr, sessionId), 2000);
+  });
+  ws.addEventListener('error', ()=>{
+    setFbStatus(false, 'Verbindungsfehler');
+  });
 }
 
-function populateModeSelect(){
-  const sel = document.getElementById('modeSelect');
-  if(!stageData){ sel.innerHTML = '<option value="">— Stage laden für passende Modi —</option>'; return; }
-  const modes = getAvailableModes(stageData.targets);
-  if(modes.length===0){ sel.innerHTML = '<option value="">Keine passenden Modi für diese Stage</option>'; return; }
-  sel.innerHTML = '<option value="">— Modus wählen —</option>' +
-    modes.map(m=>`<option value="${m}">${MODE_DEFS[m].label}</option>`).join('');
+function runLocalCountdown(stringStartTs){
+  clearInterval(localCountdownInterval);
+  const parMini = document.getElementById('parMini');
+  parMini.classList.add('running');
+  localCountdownInterval = setInterval(()=>{
+    const elapsed = (Date.now()-stringStartTs)/1000;
+    const remaining = Math.max(0, syncedParTimeSec-elapsed);
+    parMini.textContent = remaining.toFixed(1);
+    if(remaining<=0){
+      clearInterval(localCountdownInterval);
+      parMini.classList.remove('running');
+      parMini.textContent = '–';
+    }
+  }, 50);
 }
 
-/* ---------------- Aktiver Modus / Par-Timer / Tabellen-State ---------------- */
-let activeMode = null;
-let parTimeSec = 2.0;
-let parTimerActive = false;
-let parTimerTimeout = null;
-let parCountdownInterval = null;
-let stringStartTime = 0;
-let currentStringHits = [];
-let stringHistory = [];   // Par-Time-Modi: abgeschlossene Strings
-let continuousHits = [];  // Continuous-Modi: laufende Trefferliste
-
-function selectMode(modeKey){
-  activeMode = modeKey || null;
-  currentStringHits = []; stringHistory = []; continuousHits = [];
-  const def = MODE_DEFS[activeMode];
-  document.getElementById('modeTitle').textContent = def ? def.label : 'kein Modus gewählt';
-  document.getElementById('modeHint2').textContent = def
-    ? (def.kind==='partime' ? `${def.requiredShots} Schuss, Par-Time-Drill — "Start" drücken, dann feuern.` : 'Fortlaufende Erfassung — jeder Treffer wird direkt in die Tabelle eingetragen.')
-    : '';
-  const showPar = def && def.kind==='partime';
-  document.getElementById('parTimeControls').style.display = showPar ? 'block' : 'none';
-  if(showPar){
-    parTimeSec = def.parTimeDefault;
-    document.getElementById('parTimeVal').textContent = parTimeSec.toFixed(1);
-    document.getElementById('parDisplay').textContent = parTimeSec.toFixed(1);
-  }
-  renderHitsTable();
-}
-
-function adjParTime(delta){
-  parTimeSec = Math.max(0.5, Math.round((parTimeSec+delta)*10)/10);
-  document.getElementById('parTimeVal').textContent = parTimeSec.toFixed(1);
-  if(!parTimerActive) document.getElementById('parDisplay').textContent = parTimeSec.toFixed(1);
+function startString(){
+  if(!wsConnected){ alert('Erst mit dem Relay-Server verbinden.'); return; }
+  if(!syncedActiveMode){ alert('Noch kein Modus im Scoreboard gewählt.'); return; }
+  playBeep();
+  ws.send(JSON.stringify({ type:'state', stringActive:true }));
+  // Server setzt den autoritativen Zeitstempel; nach Ablauf lokal auch stringActive:false melden
+  // (Scoreboard macht das ebenfalls — doppelt schadet nicht, hilft falls das Scoreboard gerade nicht offen ist)
+  setTimeout(()=>{ ws.send(JSON.stringify({ type:'state', stringActive:false })); }, syncedParTimeSec*1000 + 150);
 }
 
 function playBeep(){
@@ -11986,115 +11962,34 @@ function playBeep(){
   }catch(e){}
 }
 
-function startString(){
-  const def = MODE_DEFS[activeMode];
-  if(!def || def.kind!=='partime') return;
-  currentStringHits = [];
-  parTimerActive = true;
-  stringStartTime = performance.now();
-  playBeep();
-  clearTimeout(parTimerTimeout); clearInterval(parCountdownInterval);
-  document.getElementById('parDisplay').classList.add('running');
-  parTimerTimeout = setTimeout(()=> finalizeString(true), parTimeSec*1000);
-  parCountdownInterval = setInterval(()=>{
-    const remaining = Math.max(0, parTimeSec - (performance.now()-stringStartTime)/1000);
-    document.getElementById('parDisplay').textContent = remaining.toFixed(1);
-  }, 50);
-  renderHitsTable();
-}
-
-function finalizeString(timedOut){
-  if(!parTimerActive) return;
-  parTimerActive = false;
-  clearTimeout(parTimerTimeout); clearInterval(parCountdownInterval);
-  document.getElementById('parDisplay').classList.remove('running');
-  document.getElementById('parDisplay').textContent = parTimeSec.toFixed(1);
-  const def = MODE_DEFS[activeMode];
-  if(timedOut){
-    while(currentStringHits.length < def.requiredShots){
-      currentStringHits.push({ time:parTimeSec, targetId:null, zone:'M', score:0, miss:true });
-    }
+// Beim Laden gespeicherte Relay-Adresse automatisch übernehmen
+window.addEventListener('load', ()=>{
+  const savedAddr = localStorage.getItem('bt_relayAddr');
+  const savedSession = localStorage.getItem('bt_sessionId');
+  if(savedAddr){
+    document.getElementById('relayAddrInput').value = savedAddr;
+    if(savedSession) document.getElementById('sessionIdInput').value = savedSession;
+    connectRelay();
   }
-  stringHistory.unshift({ label:def.label, hits:[...currentStringHits], ts:new Date().toLocaleTimeString('de-DE') });
-  currentStringHits = [];
-  renderHitsTable();
-}
+});
 
-function toggleTablePanel(){
-  const panel = document.getElementById('tablePanel');
-  panel.classList.toggle('collapsed');
-  document.getElementById('tablePanelToggle').textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
-}
-function clearAllHits(){ currentStringHits=[]; stringHistory=[]; continuousHits=[]; renderHitsTable(); }
-
-function zoneLabel(h){
-  if(h.miss) return 'M';
-  if(h.noShoot) return h.zone+' (NS)';
-  return h.zone;
-}
-
-function renderHitsTable(){
-  const body = document.getElementById('tablePanelBody');
-  const totalEl = document.getElementById('totalScore');
-  const def = MODE_DEFS[activeMode];
-
-  if(!def){
-    body.innerHTML = '<div class="hint" style="padding:10px 0;">Stage laden und Modus wählen, dann erscheinen hier die Treffer.</div>';
-    totalEl.textContent = '';
-    return;
-  }
-
-  if(def.kind==='continuous'){
-    let sum = 0;
-    const rows = continuousHits.map(h=>{
-      sum += h.score||0;
-      return `<tr class="${h.zone==='Miss'||h.noShoot?'miss':''}"><td>${h.time}</td><td>${h.targetId ?? '-'}</td><td>${zoneLabel(h)}</td><td>${h.score||0}</td></tr>`;
-    }).join('');
-    body.innerHTML = `<table class="hits"><thead><tr><th>Zeit</th><th>Target</th><th>Zone</th><th>Score</th></tr></thead><tbody>${rows||''}</tbody></table>`;
-    totalEl.textContent = `Summe: ${sum}`;
-  } else {
-    let sum = 0;
-    let html = '<table class="hits"><thead><tr><th>#</th><th>Zeit (s)</th><th>Target</th><th>Zone</th><th>Score</th></tr></thead><tbody>';
-    stringHistory.forEach((run, runIdx)=>{
-      html += `<tr class="string-header"><td colspan="5">String ${stringHistory.length-runIdx} — ${run.ts}</td></tr>`;
-      run.hits.forEach((h,i)=>{
-        sum += h.score||0;
-        html += `<tr class="${h.miss||h.noShoot?'miss':''}"><td>${i+1}</td><td>${h.time.toFixed(2)}</td><td>${h.targetId ?? '-'}</td><td>${zoneLabel(h)}</td><td>${h.score||0}</td></tr>`;
-      });
-    });
-    if(currentStringHits.length){
-      html += `<tr class="string-header"><td colspan="5">Läuft…</td></tr>`;
-      currentStringHits.forEach((h,i)=>{
-        sum += h.score||0;
-        html += `<tr class="${h.miss||h.noShoot?'miss':''}"><td>${i+1}</td><td>${h.time.toFixed(2)}</td><td>${h.targetId ?? '-'}</td><td>${zoneLabel(h)}</td><td>${h.score||0}</td></tr>`;
-      });
-    }
-    html += '</tbody></table>';
-    body.innerHTML = html;
-    totalEl.textContent = `Summe: ${sum}`;
-  }
-}
-
-/* ---------------- Treffer-Erfassung ---------------- */
+/* ---------------- Treffer-Erfassung: lokal auswerten (Zonen-Zuordnung bleibt
+   auf dem Handy, da hier bereits alles vorhanden ist) + an den Relay senden ---------------- */
 function registerHit(normX, normY){
   const result = hitTestStage(normX, normY);
-  const def = MODE_DEFS[activeMode];
-
-  if(def && def.kind==='partime'){
-    if(!parTimerActive) return; // außerhalb der String-Zeit ignorieren
-    const elapsed = (performance.now()-stringStartTime)/1000;
-    currentStringHits.push({
-      time: elapsed, targetId: result?result.targetId:null,
-      zone: result?result.zone:'-', score: result?result.score:0, noShoot: !!(result&&result.noShoot)
-    });
-    if(currentStringHits.length >= def.requiredShots) finalizeString(false);
-    renderHitsTable();
-  } else {
-    continuousHits.push({
-      time: new Date().toLocaleTimeString('de-DE'), targetId: result?result.targetId:null,
-      zone: result?result.zone:'kein Target', score: result?result.score:0, noShoot: !!(result&&result.noShoot)
-    });
-    renderHitsTable();
+  const laserBox = document.getElementById('laserBox');
+  if(laserBox){
+    const label = result ? `${result.zone}${result.score?' ('+result.score+')':''}` : 'kein Target';
+    laserBox.innerHTML = `Laser: <b>${label}</b>`;
+  }
+  if(wsConnected && ws){
+    ws.send(JSON.stringify({
+      type:'hit',
+      targetId: result ? result.targetId : null,
+      zone: result ? result.zone : null,
+      score: result ? result.score : 0,
+      noShoot: !!(result && result.noShoot)
+    }));
   }
 }
 </script>
